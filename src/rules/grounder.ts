@@ -1,10 +1,10 @@
 import { B1, B2, B3, BASES, H, MOUND, beyond, lerp, startPositions } from '../geometry';
-import type { Plan, Point, Situation } from '../types';
+import type { Options, Plan, Point, Situation } from '../types';
 import { BASE_NAME, POS_NAME } from '../types';
 import { baseAssignments, ballPointFor, cover, fielderFor } from './common';
 import { groundTarget } from './target';
 
-export function grounderPlan(s: Situation): Omit<Plan, 'title' | 'warnings'> {
+export function grounderPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> {
   const a = s.angle;
   const handler = fielderFor('ground', a);
   const ball = ballPointFor('ground', a);
@@ -43,14 +43,18 @@ export function grounderPlan(s: Situation): Omit<Plan, 'title' | 'warnings'> {
       as['2B'] = cover('B2', B2, pivot);
       as['3B'] = cover('B3', B3);
       break;
-    case 'P':
+    case 'P': {
       as['1B'] = cover('B1', B1);
-      as.SS = cover('B2', B2, pivot);
       as['3B'] = cover('B3', B3);
-      as['2B'] = dp2B
+      // 병살 시 2루 커버는 팀 방식(pitcherDpCover), 다른 키스톤은 2루 뒤 백업
+      const pv = dp2B ? o.pitcherDpCover : 'SS';
+      const other = pv === 'SS' ? '2B' : 'SS';
+      as[pv] = cover('B2', B2, pivot);
+      as[other] = dp2B
         ? { pos: beyond(ball, B2, 22), role: 'back', base: 'B2', text: '2루 송구 뒤 백업' }
-        : { pos: lerp(start['2B'], B2, 0.5), role: 'stand', text: '2루 근처 대기' };
+        : { pos: lerp(start[other], B2, 0.5), role: 'stand', text: '2루 근처 대기' };
       break;
+    }
     case '2B':
       as['1B'] = cover('B1', B1);
       as.SS = cover('B2', B2, pivot);

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { B1, B2, B3, H, dist, insidePlayable } from '../src/geometry';
 import { computePlan } from '../src/rules';
-import type { Kind, Plan, Point, PosKey, Situation, Shift } from '../src/types';
-import { POS_KEYS } from '../src/types';
+import type { Kind, Options, Plan, Point, PosKey, Situation, Shift } from '../src/types';
+import { DEFAULT_OPTIONS, POS_KEYS } from '../src/types';
 
 function sit(p: Partial<Situation> & { r?: (1 | 2 | 3)[] }): Situation {
   const r = p.r ?? [];
@@ -184,7 +184,7 @@ describe('장타', () => {
 });
 
 describe('15. 불변 조건 — 전수 검사', () => {
-  const kinds: Kind[] = ['ground', 'single', 'fly', 'extra'];
+  const kinds: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt'];
   const angles = [-40, -27, -14, 0, 14, 27, 40];
   const shifts: Shift[] = ['normal', 'dp', 'in'];
   const all: Situation[] = [];
@@ -195,11 +195,21 @@ describe('15. 불변 조건 — 전수 검사', () => {
           for (const shift of shifts)
             all.push({ kind, angle, outs, shift, runners: { 1: !!(m & 1), 2: !!(m & 2), 3: !!(m & 4) } });
 
-  it('상황 2,016개', () => expect(all).toHaveLength(2016));
+  it('상황 3,024개', () => expect(all).toHaveLength(3024));
 
-  it('모든 Plan이 §4 불변 조건 만족', () => {
+  // 기본 팀 방식 + 옵션을 하나씩 바꾼 5가지
+  const optionSets: Options[] = [
+    DEFAULT_OPTIONS,
+    { ...DEFAULT_OPTIONS, homeCutoff: 'firstBase' },
+    { ...DEFAULT_OPTIONS, centerKeystone: '2B' },
+    { ...DEFAULT_OPTIONS, pitcherDpCover: '2B' },
+    { ...DEFAULT_OPTIONS, extraHome2B: 'firstBase' },
+    { ...DEFAULT_OPTIONS, buntPlay: 'rotation' },
+  ];
+
+  it.each(optionSets.map((o, i) => [i, o] as const))('옵션 세트 %i: 모든 Plan이 §4 불변 조건 만족', (_i, opts) => {
     for (const s of all) {
-      const p = computePlan(s);
+      const p = computePlan(s, opts);
       const ctx = JSON.stringify(s);
       expect(Object.keys(p.assignments).sort(), ctx).toEqual([...POS_KEYS].sort());
       expect(POS_KEYS.filter((k) => role(p, k) === 'ball'), ctx).toHaveLength(1);
@@ -240,6 +250,10 @@ describe('그라운드 클릭 · URL', () => {
     expect(c).toEqual({ type: 'base', base: 1 });
     expect(applyClick(base, c).runners[1]).toBe(true);
   });
+  it('내야 클릭: 번트·내야 뜬공은 종류 유지', () => {
+    expect(applyClick({ ...base, kind: 'bunt' }, interpretClick({ x: 40, y: 100 })).kind).toBe('bunt');
+    expect(applyClick({ ...base, kind: 'popup' }, interpretClick({ x: 40, y: 100 })).kind).toBe('popup');
+  });
   it('외야 클릭: 땅볼이었으면 단타로, 방향은 스냅', () => {
     const s = applyClick(base, interpretClick({ x: -150, y: 200 }));
     expect(s.kind).toBe('single');
@@ -264,8 +278,98 @@ describe('그라운드 클릭 · URL', () => {
     expect(fromQuery(toQuery(s))).toEqual(s);
   });
   it('잘못된 URL 값은 기본값으로', () => {
-    const s = fromQuery('?k=bunt&a=abc&o=7&s=x');
+    const s = fromQuery('?k=homerun&a=abc&o=7&s=x');
     expect(s.kind).toBe('single');
     expect([0, 1, 2]).toContain(s.outs);
+  });
+});
+
+const opt = (o: Partial<Options>): Options => ({ ...DEFAULT_OPTIONS, ...o });
+
+describe('팀 방식 (§12-1)', () => {
+  it('홈 컷오프 항상 1루수: 좌익 단타 주자 2루 → 1B 컷오프, 3B 3루 커버', () => {
+    const p = computePlan(sit({ kind: 'single', angle: -27, r: [2] }), opt({ homeCutoff: 'firstBase' }));
+    expect(cutters(p)).toEqual(['1B']);
+    expect(coverOf(p, '3B')).toBe('B3');
+  });
+  it('정면 키스톤 2B: 중견 단타 → 2B 컷오프, SS 2루 커버 / 장타 릴레이 2B', () => {
+    const p = computePlan(sit({ kind: 'single', angle: 0 }), opt({ centerKeystone: '2B' }));
+    expect(cutters(p)).toEqual(['2B']);
+    expect(coverOf(p, 'SS')).toBe('B2');
+    const e = computePlan(sit({ kind: 'extra', angle: 0 }), opt({ centerKeystone: '2B' }));
+    expect(same(e.throwPath[1], e.assignments['2B'].pos)).toBe(true);
+  });
+  it('투수 앞 병살 2루 커버 2B', () => {
+    const p = computePlan(sit({ angle: 0, r: [1] }), opt({ pitcherDpCover: '2B' }));
+    expect(coverOf(p, '2B')).toBe('B2');
+    expect(p.assignments.SS).toMatchObject({ role: 'back', base: 'B2' });
+  });
+  it('장타 홈 승부 2루: 1B 2루 커버, 3B 홈 컷오프, P 3루 커버', () => {
+    const p = computePlan(sit({ kind: 'extra', angle: -40, r: [1] }), opt({ extraHome2B: 'firstBase' }));
+    expect(coverOf(p, '1B')).toBe('B2');
+    expect(coverOf(p, 'P')).toBe('B3');
+    expect(same(p.throwPath[2], p.assignments['3B'].pos)).toBe(true);
+  });
+});
+
+describe('내야 뜬공 · 인필드 플라이 (§12-2)', () => {
+  it('주자 1·2루 0아웃 → 인필드 플라이, SS 포구, 송구 없음', () => {
+    const p = computePlan(sit({ kind: 'popup', angle: -14, r: [1, 2] }));
+    expect(role(p, 'SS')).toBe('ball');
+    expect(p.target).toBeNull();
+    expect(p.warnings?.[0]).toContain('인필드 플라이');
+  });
+  it('주자 1루만 → 인필드 플라이 아님', () => {
+    const p = computePlan(sit({ kind: 'popup', angle: -14, r: [1] }));
+    expect((p.warnings ?? []).join(' ')).not.toContain('인필드 플라이');
+  });
+  it('2아웃 만루 → 인필드 플라이 아님, 공수 교대', () => {
+    const p = computePlan(sit({ kind: 'popup', angle: 14, r: [1, 2, 3], outs: 2 }));
+    const w = (p.warnings ?? []).join(' ');
+    expect(w).not.toContain('인필드 플라이');
+    expect(w).toContain('공수 교대');
+  });
+  it('마운드 부근도 투수가 아닌 유격수', () => {
+    expect(role(computePlan(sit({ kind: 'popup', angle: 0 })), 'SS')).toBe('ball');
+  });
+  it('1루수 포구 → 투수 1루 커버', () => {
+    const p = computePlan(sit({ kind: 'popup', angle: 40 }));
+    expect(role(p, '1B')).toBe('ball');
+    expect(coverOf(p, 'P')).toBe('B1');
+  });
+});
+
+describe('번트 (§12-3)', () => {
+  it('3루 쪽 · 주자 1루 → 3B 처리, 1루 송구, 대체 2루, 2B 1루 커버', () => {
+    const p = computePlan(sit({ kind: 'bunt', angle: -27, r: [1] }));
+    expect(role(p, '3B')).toBe('ball');
+    expect(p.target).toBe('B1');
+    expect(same(p.altThrowPath![1], B2)).toBe(true);
+    expect(coverOf(p, '2B')).toBe('B1');
+  });
+  it('3루 쪽 · 주자 1·2루 기본 → 투수 처리, 3B 3루 커버, 3루 포스', () => {
+    const p = computePlan(sit({ kind: 'bunt', angle: -27, r: [1, 2] }));
+    expect(role(p, 'P')).toBe('ball');
+    expect(coverOf(p, '3B')).toBe('B3');
+    expect(p.target).toBe('B3');
+  });
+  it('주자 1·2루 로테이션 → 3B 처리, SS 3루 커버, 2루 비움', () => {
+    const p = computePlan(sit({ kind: 'bunt', angle: -27, r: [1, 2] }), opt({ buntPlay: 'rotation' }));
+    expect(role(p, '3B')).toBe('ball');
+    expect(coverOf(p, 'SS')).toBe('B3');
+    expect(POS_KEYS.some((k) => coverOf(p, k) === 'B2')).toBe(false);
+  });
+  it('로테이션 옵션이어도 주자 1루만이면 기본 수비', () => {
+    const p = computePlan(sit({ kind: 'bunt', angle: -27, r: [1] }), opt({ buntPlay: 'rotation' }));
+    expect(coverOf(p, 'SS')).toBe('B2');
+  });
+  it('주자 3루 → 홈 (스퀴즈 저지)', () => {
+    expect(computePlan(sit({ kind: 'bunt', angle: 0, r: [3] })).target).toBe('H');
+  });
+  it('2아웃 → 1루, 대체 경로 없음', () => {
+    const p = computePlan(sit({ kind: 'bunt', angle: 27, r: [1], outs: 2 }));
+    expect(p.target).toBe('B1');
+    expect(p.altThrowPath).toBeUndefined();
+    expect(role(p, '1B')).toBe('ball');
   });
 });

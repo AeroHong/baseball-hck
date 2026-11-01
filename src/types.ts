@@ -3,7 +3,7 @@ export interface Point {
   y: number;
 }
 
-export type Kind = 'ground' | 'single' | 'fly' | 'extra';
+export type Kind = 'ground' | 'single' | 'fly' | 'extra' | 'popup' | 'bunt';
 export type Base = 'H' | 'B1' | 'B2' | 'B3';
 export type PosKey = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
 export type Shift = 'normal' | 'dp' | 'in';
@@ -30,6 +30,31 @@ export interface Assignment {
   /** cover 면 필수. back 이면 백업 대상 베이스(있을 때) */
   base?: Base;
   text: string;
+}
+
+/** 팀 방식 (§12-1) */
+export interface Options {
+  homeCutoff: 'split' | 'firstBase';
+  centerKeystone: 'SS' | '2B';
+  pitcherDpCover: 'SS' | '2B';
+  extraHome2B: 'empty' | 'firstBase';
+  buntPlay: 'standard' | 'rotation';
+}
+
+export const DEFAULT_OPTIONS: Options = {
+  homeCutoff: 'split',
+  centerKeystone: 'SS',
+  pitcherDpCover: 'SS',
+  extraHome2B: 'empty',
+  buntPlay: 'standard',
+};
+
+/** 주자 이동 (§12-4) */
+export interface RunnerMove {
+  id: 'batter' | 1 | 2 | 3;
+  /** 지나는 베이스 순서. 첫 원소 = 출발 베이스 (타자는 'H') */
+  path: Base[];
+  result: 'safe' | 'out' | 'attempt' | 'hold';
 }
 
 export interface Plan {

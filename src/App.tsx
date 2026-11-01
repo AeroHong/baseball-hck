@@ -6,14 +6,32 @@ import RoleCards from './components/RoleCards';
 import Runners from './components/Runners';
 import Scoreboard, { type Theme } from './components/Scoreboard';
 import Summary from './components/Summary';
+import TeamOptions from './components/TeamOptions';
 import { startPositions } from './geometry';
 import { computePlan } from './rules';
 import { applyClick, fromQuery, interpretClick, toQuery } from './situation';
-import type { PosKey, Role, Situation } from './types';
-import { ROLE_NAME } from './types';
+import type { Options, PosKey, Role, Situation } from './types';
+import { DEFAULT_OPTIONS, ROLE_NAME } from './types';
 
 const LEGEND: Role[] = ['ball', 'cover', 'cut', 'back', 'stand'];
 const THEME_KEY = 'baseball-hck:theme';
+const OPTIONS_KEY = 'baseball-hck:options';
+
+function loadOptions(): Options {
+  try {
+    const raw = localStorage.getItem(OPTIONS_KEY);
+    if (!raw) return DEFAULT_OPTIONS;
+    const o = JSON.parse(raw) as Partial<Options>;
+    // 저장된 값 중 유효한 키만 반영
+    const out = { ...DEFAULT_OPTIONS };
+    for (const k of Object.keys(DEFAULT_OPTIONS) as (keyof Options)[]) {
+      if (typeof o[k] === 'string') (out as Record<string, string>)[k] = o[k] as string;
+    }
+    return out;
+  } catch {
+    return DEFAULT_OPTIONS;
+  }
+}
 
 /** 화면 좌표 → 필드 좌표(ft) */
 function toFieldPoint(e: React.PointerEvent<SVGSVGElement>) {
@@ -41,7 +59,8 @@ export default function App() {
   const [replayKey, setReplayKey] = useState(0);
   const [focus, setFocus] = useState<PosKey | null>(null);
   const [theme, setTheme] = useState<Theme>(loadTheme);
-  const plan = useMemo(() => computePlan(situation), [situation]);
+  const [options, setOptions] = useState<Options>(loadOptions);
+  const plan = useMemo(() => computePlan(situation, options), [situation, options]);
   const start = useMemo(() => startPositions(situation.shift), [situation.shift]);
 
   // 상황을 URL 에 반영 → 링크로 공유 가능
@@ -59,6 +78,14 @@ export default function App() {
       /* 저장 불가 환경은 무시 */
     }
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OPTIONS_KEY, JSON.stringify(options));
+    } catch {
+      /* 저장 불가 환경은 무시 */
+    }
+  }, [options]);
 
   const onFieldPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     const p = toFieldPoint(e);
@@ -95,6 +122,7 @@ export default function App() {
           <Controls situation={situation} onChange={setSituation} />
           <Summary plan={plan} />
           <RoleCards plan={plan} focus={focus} onFocus={setFocus} />
+          <TeamOptions options={options} onChange={setOptions} />
         </div>
       </div>
     </div>

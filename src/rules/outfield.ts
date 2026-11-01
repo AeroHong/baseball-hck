@@ -1,11 +1,11 @@
 import { B1, B2, B3, BASES, H, MOUND, along, beyond, dist } from '../geometry';
-import type { Base, Plan, PosKey, Situation } from '../types';
+import type { Base, Options, Plan, PosKey, Situation } from '../types';
 import { BASE_NAME, POS_NAME } from '../types';
-import { baseAssignments, ballPointFor, cover, fielderFor, isLeftSide, placeOutfield } from './common';
+import { baseAssignments, ballPointFor, cover, fielderFor, keystoneFor, placeOutfield } from './common';
 import { outfieldTarget } from './target';
 
 /** §5-4, §5-5 외야 단타·뜬공 */
-export function outfieldPlan(s: Situation): Omit<Plan, 'title' | 'warnings'> & { warnings: string[] } {
+export function outfieldPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> & { warnings: string[] } {
   const a = s.angle;
   const handler = fielderFor(s.kind, a);
   const ball = ballPointFor(s.kind, a);
@@ -34,7 +34,7 @@ export function outfieldPlan(s: Situation): Omit<Plan, 'title' | 'warnings'> & {
   if (target === 'H') {
     cutPoint = along(H, ball, 48);
     as.P = { pos: beyond(ball, H, 38), role: 'back', base: 'H', text: '홈 뒤 백업' };
-    if (handler === 'LF') {
+    if (handler === 'LF' && o.homeCutoff === 'split') {
       cutter = '3B';
       as.SS = cover('B3', B3, ' (3루수가 컷오프로 나감)');
       as['2B'] = cover('B2', B2);
@@ -54,7 +54,7 @@ export function outfieldPlan(s: Situation): Omit<Plan, 'title' | 'warnings'> & {
     as['1B'] = cover('B1', B1);
     as.P = { pos: beyond(ball, B3, 36), role: 'back', base: 'B3', text: '3루 뒤 백업' };
   } else {
-    cutter = isLeftSide(a) ? 'SS' : '2B';
+    cutter = keystoneFor(a, o);
     const other: PosKey = cutter === 'SS' ? '2B' : 'SS';
     cutPoint = along(B2, ball, Math.min(70, dist(B2, ball) * 0.6));
     as[other] = cover('B2', B2);

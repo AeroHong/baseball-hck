@@ -1,5 +1,5 @@
 import { B2, H, along, angleOf, dist, fenceDist, lerp, pt, startPositions } from '../geometry';
-import type { Assignment, Base, Kind, Point, PosKey, Situation } from '../types';
+import type { Assignment, Base, Kind, Options, Point, PosKey, Situation } from '../types';
 import { BASE_NAME } from '../types';
 
 export type Assignments = Record<PosKey, Assignment>;
@@ -30,11 +30,21 @@ export function ballPointFor(kind: Kind, a: number): Point {
       return pt(Math.min(285, f - 45), a);
     case 'extra':
       return pt(f - 20, a);
+    case 'popup':
+      return pt(95, a);
+    case 'bunt':
+      return pt(Math.abs(a) <= 10 ? 28 : 36, a);
   }
 }
 
 /** 정면(a=0)은 좌측 취급 */
 export const isLeftSide = (a: number) => a <= 0;
+
+/** 타구 쪽 키스톤. 정면(a=0)은 팀 방식(centerKeystone) */
+export function keystoneFor(a: number, o: Options): '2B' | 'SS' {
+  if (a === 0) return o.centerKeystone;
+  return a < 0 ? 'SS' : '2B';
+}
 
 /** 인접 외야수: CF 처리면 타구 쪽 코너, 코너면 CF */
 export function adjacentOF(handler: PosKey, a: number): PosKey {

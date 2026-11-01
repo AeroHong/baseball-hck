@@ -1,10 +1,10 @@
 import { B2, B3, BASES, H, along, beyond, dist } from '../geometry';
-import type { Plan, PosKey, Situation } from '../types';
-import { baseAssignments, ballPointFor, cover, fielderFor, placeOutfield } from './common';
+import type { Options, Plan, PosKey, Situation } from '../types';
+import { baseAssignments, ballPointFor, cover, fielderFor, keystoneFor, placeOutfield } from './common';
 import { extraTarget } from './target';
 
 /** §5-6 장타 — 탠덤 릴레이 */
-export function extraBasePlan(s: Situation): Omit<Plan, 'title' | 'warnings'> {
+export function extraBasePlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> {
   const a = s.angle;
   const handler = fielderFor('extra', a);
   const ball = ballPointFor('extra', a);
@@ -12,7 +12,7 @@ export function extraBasePlan(s: Situation): Omit<Plan, 'title' | 'warnings'> {
   const tp = BASES[target];
   const as = baseAssignments(s);
 
-  const relayMan: PosKey = a > 0 ? '2B' : 'SS';
+  const relayMan: PosKey = keystoneFor(a, o);
   const trailer: PosKey = relayMan === 'SS' ? '2B' : 'SS';
   const relay = along(ball, tp, Math.min(150, dist(ball, tp) * 0.5));
   const trail = along(relay, tp, 35);
@@ -26,7 +26,18 @@ export function extraBasePlan(s: Situation): Omit<Plan, 'title' | 'warnings'> {
   const throwPath = [ball, relay];
   const cutIndices = [1];
 
-  if (target === 'H') {
+  if (target === 'H' && o.extraHome2B === 'firstBase') {
+    placeOutfield(as, s, handler, ball, 'toward2B');
+    const cut = along(H, relay, 46);
+    as['3B'] = { pos: cut, role: 'cut', text: '홈 컷오프 (팀 방식: 3루수)' };
+    as['1B'] = cover('B2', B2, ' (타자 주자 따라감)');
+    as.P = cover('B3', B3, ' (3루수가 컷오프로 나감)');
+    as.C.text = '홈 커버, 컷오프에게 콜';
+    throwPath.push(cut, H);
+    cutIndices.push(2);
+    notes.push('주자가 있는 장타 — 득점을 막기 위해 홈까지 탠덤 릴레이.');
+    notes.push('팀 방식: 1루수가 타자 주자를 따라 2루를 커버하고, 3루수가 홈 컷오프, 투수가 3루를 커버한다. 대신 홈 뒤 백업이 없다.');
+  } else if (target === 'H') {
     placeOutfield(as, s, handler, ball, 'behind2B', relay);
     const cut = along(H, relay, 46);
     as['1B'] = { pos: cut, role: 'cut', text: '홈 컷오프 — 릴레이 → 홈 라인 위' };

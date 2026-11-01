@@ -7,6 +7,8 @@ const KINDS: { value: Kind; label: string }[] = [
   { value: 'single', label: `외야 ${KIND_NAME.single}` },
   { value: 'fly', label: `외야 ${KIND_NAME.fly}` },
   { value: 'extra', label: KIND_NAME.extra },
+  { value: 'popup', label: KIND_NAME.popup },
+  { value: 'bunt', label: KIND_NAME.bunt },
 ];
 
 const SHIFTS: { value: Shift; label: string }[] = [

@@ -1,12 +1,17 @@
 import { clampAngle } from '../geometry';
-import type { Kind, Plan, Situation } from '../types';
+import type { Kind, Options, Plan, Situation } from '../types';
+import { DEFAULT_OPTIONS } from '../types';
+import { buntPlan, buntSide } from './bunt';
 import { extraBasePlan } from './extraBase';
 import { grounderPlan } from './grounder';
 import { outfieldPlan } from './outfield';
+import { popupPlan } from './popup';
 
 export const KIND_NAME: Record<Kind, string> = {
-  ground: '땅볼', single: '단타', fly: '뜬공', extra: '장타',
+  ground: '땅볼', single: '단타', fly: '뜬공', extra: '장타', popup: '내야 뜬공', bunt: '번트',
 };
+
+const BUNT_SIDE_NAME = { '3B': '3루 쪽', P: '투수 앞', '1B': '1루 쪽' } as const;
 
 export const DIRECTIONS = [
   { label: '좌선상', angle: -40 },
@@ -32,7 +37,8 @@ export function runnersLabel(s: Situation): string {
 }
 
 export function situationTitle(s: Situation): string {
-  return `${s.outs}아웃 · ${runnersLabel(s)} · ${directionLabel(s.angle)} ${KIND_NAME[s.kind]}`;
+  const where = s.kind === 'bunt' ? BUNT_SIDE_NAME[buntSide(s.angle)] : directionLabel(s.angle);
+  return `${s.outs}아웃 · ${runnersLabel(s)} · ${where} ${KIND_NAME[s.kind]}`;
 }
 
 /** §5-0 시프트 유효성 경고 */
@@ -47,11 +53,25 @@ function shiftWarnings(s: Situation): string[] {
   return w;
 }
 
-export function computePlan(input: Situation): Plan {
+function kindPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> & { warnings?: string[] } {
+  switch (s.kind) {
+    case 'ground':
+      return grounderPlan(s, o);
+    case 'extra':
+      return extraBasePlan(s, o);
+    case 'popup':
+      return popupPlan(s);
+    case 'bunt':
+      return buntPlan(s, o);
+    default:
+      return outfieldPlan(s, o);
+  }
+}
+
+export function computePlan(input: Situation, options: Options = DEFAULT_OPTIONS): Plan {
   const s: Situation = { ...input, angle: clampAngle(input.angle) };
-  const base =
-    s.kind === 'ground' ? grounderPlan(s) : s.kind === 'extra' ? extraBasePlan(s) : outfieldPlan(s);
-  const warnings = [...((base as { warnings?: string[] }).warnings ?? []), ...shiftWarnings(s)];
+  const base = kindPlan(s, options);
+  const warnings = [...(base.warnings ?? []), ...shiftWarnings(s)];
   return {
     ...base,
     title: situationTitle(s),
