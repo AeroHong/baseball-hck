@@ -4,6 +4,7 @@ import type { Plan, Point, PosKey, Role } from '../types';
 import { POS_KEYS } from '../types';
 import { sx, sy, xy } from './Field';
 import Fielders from './Fielders';
+import RunnerMarkers from './RunnerMarkers';
 
 interface PlayProps {
   plan: Plan;
@@ -15,7 +16,7 @@ interface PlayProps {
 
 /** 타구 선 · 송구 경로 · 대체 경로 · 수비수 · 공. 위치는 usePlayAnimation 이 직접 갱신 */
 export default function Play({ plan, start, replayKey, focus, onFocus }: PlayProps) {
-  const refs = useRef<PlayRefs>({ fielders: {}, ball: null, hit: null, throwGroup: null, altGroup: null });
+  const refs = useRef<PlayRefs>({ fielders: {}, ball: null, hit: null, throwGroup: null, altGroup: null, runners: {}, results: {} });
   usePlayAnimation(refs, plan, start, replayKey);
 
   const roles = useMemo(
@@ -24,6 +25,13 @@ export default function Play({ plan, start, replayKey, focus, onFocus }: PlayPro
   );
   const registerFielder = useCallback((k: PosKey, el: SVGGElement | null) => {
     refs.current.fielders[k] = el;
+  }, []);
+
+  const registerRunner = useCallback((k: string, el: SVGGElement | null) => {
+    refs.current.runners[k] = el;
+  }, []);
+  const registerResult = useCallback((k: string, el: SVGGElement | null) => {
+    refs.current.results[k] = el;
   }, []);
 
   const throwPoints = plan.throwPath.map(xy).join(' ');
@@ -50,6 +58,8 @@ export default function Play({ plan, start, replayKey, focus, onFocus }: PlayPro
       </g>
 
       <Fielders positions={start} roles={roles} registerRef={registerFielder} focus={focus} onFocus={onFocus} />
+
+      <RunnerMarkers moves={plan.runnerMoves} registerRunner={registerRunner} registerResult={registerResult} />
 
       <circle ref={(el) => void (refs.current.ball = el)} className="ball" cx={0} cy={0} r={3.4} />
     </g>

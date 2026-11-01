@@ -4,7 +4,7 @@ import { BASE_NAME, POS_NAME } from '../types';
 import { baseAssignments, ballPointFor, cover, fielderFor } from './common';
 import { groundTarget } from './target';
 
-export function grounderPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> {
+export function grounderPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings' | 'runnerMoves'> {
   const a = s.angle;
   const handler = fielderFor('ground', a);
   const ball = ballPointFor('ground', a);

@@ -191,8 +191,14 @@ body {
 .field { cursor: crosshair; }
 .base-target { fill: transparent; stroke: transparent; }
 .base-hit:hover .base-target { stroke: var(--chalk); stroke-width: 1.2; stroke-dasharray: 2 2; cursor: pointer; }
-.runner { fill: #f5c518; stroke: #1d1d1b; stroke-width: 1.2; }
-.runner-text { fill: #1d1d1b; font-size: 7px; font-weight: 800; text-anchor: middle; pointer-events: none; }
+.runner circle { fill: #f5c518; stroke: #1d1d1b; stroke-width: 1.2; }
+.runner.batter circle { fill: #ffffff; }
+.runner text { fill: #1d1d1b; font-size: 7px; font-weight: 800; text-anchor: middle; pointer-events: none; }
+.runner-markers { pointer-events: none; }
+.runner-result circle { stroke: #fff; stroke-width: 1; }
+.runner-result.out circle { fill: #d92d20; }
+.runner-result.attempt circle { fill: #1d1d1b; }
+.runner-result text { fill: #fff; font-size: 6.5px; font-weight: 800; text-anchor: middle; }
 .hint { margin: 6px 4px 2px; font-size: 0.8rem; color: var(--muted); }
 
 /* 수비수 강조 */

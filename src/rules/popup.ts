@@ -16,7 +16,7 @@ function popupHandler(a: number): PosKey {
 }
 
 /** §12-2 내야 뜬공 */
-export function popupPlan(s: Situation): Omit<Plan, 'title'> & { warnings: string[] } {
+export function popupPlan(s: Situation): Omit<Plan, 'title' | 'runnerMoves'> & { warnings: string[] } {
   const a = s.angle;
   const handler = popupHandler(a);
   const ball = ballPointFor('popup', a);

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { MutableRefObject } from 'react';
-import { H, lerp, pointAlong } from '../geometry';
+import { H, dist, lerp, pointAlong, runnerSpot } from '../geometry';
 import type { Plan, Point, PosKey } from '../types';
 import { POS_KEYS } from '../types';
 
@@ -14,7 +14,13 @@ export interface PlayRefs {
   hit: SVGLineElement | null;
   throwGroup: SVGGElement | null;
   altGroup: SVGGElement | null;
+  runners: Record<string, SVGGElement | null>;
+  results: Record<string, SVGGElement | null>;
 }
+
+/** 주자 속도: 3베이스를 전체 재생 시간에 달리는 속도 (ft/ms) */
+const RUNNER_SPEED = (3 * 95) / (T1 + T2);
+const BATTER_DELAY = 200;
 
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const easeInOutQuad = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
@@ -44,6 +50,12 @@ export function usePlayAnimation(
     };
     const setOpacity = (el: SVGGElement | null, o: number) => el?.setAttribute('opacity', o.toFixed(3));
     const hasThrow = plan.throwPath.length > 1;
+    const runnerPaths = plan.runnerMoves.map((m) => {
+      const pts = m.path.map(runnerSpot);
+      let len = 0;
+      for (let i = 1; i < pts.length; i++) len += dist(pts[i - 1], pts[i]);
+      return { key: String(m.id), pts, len, delay: m.id === 'batter' ? BATTER_DELAY : 0 };
+    });
 
     const render = (t: number) => {
       const kMove = easeInOutQuad(clamp01(t / T1));
@@ -57,6 +69,14 @@ export function usePlayAnimation(
       setOpacity(r.throwGroup, hasThrow ? clamp01(kThrow * 3) : 0);
       setOpacity(r.altGroup, clamp01(kThrow * 3));
       setBall(t < T1 || !hasThrow ? hitPoint : pointAlong(plan.throwPath, easeInOutQuad(kThrow)));
+
+      for (const rp of runnerPaths) {
+        const run = Math.max(0, t - rp.delay) * RUNNER_SPEED;
+        const k = rp.len > 0 ? Math.min(1, run / rp.len) : 1;
+        const p = pointAlong(rp.pts, k);
+        r.runners[rp.key]?.setAttribute('transform', `translate(${p.x.toFixed(1)} ${(-p.y).toFixed(1)})`);
+        r.results[rp.key]?.setAttribute('opacity', k >= 1 && rp.len > 0 ? '1' : rp.len === 0 && t > T1 ? '1' : '0');
+      }
     };
 
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;

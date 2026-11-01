@@ -139,3 +139,11 @@ export function pointAlong(path: Point[], k: number): Point {
   }
   return path[path.length - 1];
 }
+
+/** 주자 마커 위치: 수비수와 겹치지 않게 베이스 바깥쪽 11ft */
+const DIAMOND_CENTER: Point = { x: 0, y: 63.6 };
+export function runnerSpot(b: Base): Point {
+  if (b === 'H') return { x: -14, y: 0 }; // 홈은 포수와 겹치지 않게 타석(3루 쪽) 위치
+  const p = BASES[b];
+  return along(DIAMOND_CENTER, p, dist(DIAMOND_CENTER, p) + 11);
+}

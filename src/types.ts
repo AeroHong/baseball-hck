@@ -66,6 +66,8 @@ export interface Plan {
   cutIndices: number[];
   target: Base | null;
   altThrowPath?: Point[];
+  /** 타자·주자 이동 (§12-4) */
+  runnerMoves: RunnerMove[];
   notes: string[];
   warnings?: string[];
 }

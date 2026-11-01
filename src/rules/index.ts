@@ -6,6 +6,7 @@ import { extraBasePlan } from './extraBase';
 import { grounderPlan } from './grounder';
 import { outfieldPlan } from './outfield';
 import { popupPlan } from './popup';
+import { runnerMoves } from './runners';
 
 export const KIND_NAME: Record<Kind, string> = {
   ground: '땅볼', single: '단타', fly: '뜬공', extra: '장타', popup: '내야 뜬공', bunt: '번트',
@@ -53,7 +54,7 @@ function shiftWarnings(s: Situation): string[] {
   return w;
 }
 
-function kindPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> & { warnings?: string[] } {
+function kindPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings' | 'runnerMoves'> & { warnings?: string[] } {
   switch (s.kind) {
     case 'ground':
       return grounderPlan(s, o);
@@ -75,6 +76,7 @@ export function computePlan(input: Situation, options: Options = DEFAULT_OPTIONS
   return {
     ...base,
     title: situationTitle(s),
+    runnerMoves: runnerMoves(s, base.target),
     warnings: warnings.length ? warnings : undefined,
   };
 }

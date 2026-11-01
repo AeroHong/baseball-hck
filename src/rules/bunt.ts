@@ -20,7 +20,7 @@ export function buntTarget(s: Situation): { target: Base; alt?: Base } {
 }
 
 /** §12-3 번트 수비 */
-export function buntPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> {
+export function buntPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings' | 'runnerMoves'> {
   const a = s.angle;
   const side = buntSide(a);
   const r12 = isR12(s);

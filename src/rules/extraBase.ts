@@ -4,7 +4,7 @@ import { baseAssignments, ballPointFor, cover, fielderFor, keystoneFor, placeOut
 import { extraTarget } from './target';
 
 /** §5-6 장타 — 탠덤 릴레이 */
-export function extraBasePlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> {
+export function extraBasePlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings' | 'runnerMoves'> {
   const a = s.angle;
   const handler = fielderFor('extra', a);
   const ball = ballPointFor('extra', a);

@@ -5,7 +5,7 @@ import { baseAssignments, ballPointFor, cover, fielderFor, keystoneFor, placeOut
 import { outfieldTarget } from './target';
 
 /** §5-4, §5-5 외야 단타·뜬공 */
-export function outfieldPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings'> & { warnings: string[] } {
+export function outfieldPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings' | 'runnerMoves'> & { warnings: string[] } {
   const a = s.angle;
   const handler = fielderFor(s.kind, a);
   const ball = ballPointFor(s.kind, a);
