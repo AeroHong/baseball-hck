@@ -9,10 +9,12 @@ interface PlayProps {
   plan: Plan;
   start: Record<PosKey, Point>;
   replayKey: number;
+  focus: PosKey | null;
+  onFocus: (k: PosKey | null) => void;
 }
 
 /** 타구 선 · 송구 경로 · 대체 경로 · 수비수 · 공. 위치는 usePlayAnimation 이 직접 갱신 */
-export default function Play({ plan, start, replayKey }: PlayProps) {
+export default function Play({ plan, start, replayKey, focus, onFocus }: PlayProps) {
   const refs = useRef<PlayRefs>({ fielders: {}, ball: null, hit: null, throwGroup: null, altGroup: null });
   usePlayAnimation(refs, plan, start, replayKey);
 
@@ -47,7 +49,7 @@ export default function Play({ plan, start, replayKey }: PlayProps) {
         ))}
       </g>
 
-      <Fielders positions={start} roles={roles} registerRef={registerFielder} />
+      <Fielders positions={start} roles={roles} registerRef={registerFielder} focus={focus} onFocus={onFocus} />
 
       <circle ref={(el) => void (refs.current.ball = el)} className="ball" cx={0} cy={0} r={3.4} />
     </g>
