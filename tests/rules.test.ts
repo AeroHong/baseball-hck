@@ -230,3 +230,42 @@ describe('경기장 경계', () => {
     expect(insidePlayable({ x: 0, y: 390 })).toBe(true);
   });
 });
+
+import { applyClick, fromQuery, interpretClick, toQuery } from '../src/situation';
+
+describe('그라운드 클릭 · URL', () => {
+  const base = sit({ kind: 'ground', angle: 0 });
+  it('베이스 근처 클릭 = 주자 토글', () => {
+    const c = interpretClick({ x: 60, y: 66 });
+    expect(c).toEqual({ type: 'base', base: 1 });
+    expect(applyClick(base, c).runners[1]).toBe(true);
+  });
+  it('외야 클릭: 땅볼이었으면 단타로, 방향은 스냅', () => {
+    const s = applyClick(base, interpretClick({ x: -150, y: 200 }));
+    expect(s.kind).toBe('single');
+    expect(s.angle).toBe(-40);
+  });
+  it('외야 클릭: 뜬공은 뜬공 유지', () => {
+    const s = applyClick({ ...base, kind: 'fly' }, interpretClick({ x: 0, y: 250 }));
+    expect(s.kind).toBe('fly');
+    expect(s.angle).toBe(0);
+  });
+  it('내야 클릭 = 땅볼', () => {
+    const s = applyClick({ ...base, kind: 'extra' }, interpretClick({ x: 40, y: 100 }));
+    expect(s.kind).toBe('ground');
+    expect(s.angle).toBe(27);
+  });
+  it('파울 지역·홈 뒤 클릭은 무시', () => {
+    expect(interpretClick({ x: 100, y: 40 })).toBeNull();
+    expect(interpretClick({ x: 0, y: -20 })).toBeNull();
+  });
+  it('URL 왕복', () => {
+    const s = sit({ kind: 'extra', angle: 14, r: [1, 3], outs: 2, shift: 'in' });
+    expect(fromQuery(toQuery(s))).toEqual(s);
+  });
+  it('잘못된 URL 값은 기본값으로', () => {
+    const s = fromQuery('?k=bunt&a=abc&o=7&s=x');
+    expect(s.kind).toBe('single');
+    expect([0, 1, 2]).toContain(s.outs);
+  });
+});
