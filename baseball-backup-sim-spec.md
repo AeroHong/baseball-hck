@@ -83,7 +83,7 @@ tests/
 - 단위: 피트(ft). 홈플레이트 = 원점 `(0,0)`, 중견수 방향 = +y
 - 방향 각도 `a`: 중견 0°, 좌측 음수, 우측 양수 (파울라인 ±45°)
 - `pt(d, a) = { x: d·sin a, y: d·cos a }`
-- SVG 변환: `(x, -y)` (viewBox 예: `-262 -432 524 492`)
+- SVG 변환: `(x, -y)` (viewBox는 아래 "경기장 경계" 참고)
 
 ### 상수
 | 이름 | 좌표 |
@@ -94,6 +94,14 @@ tests/
 | 3루 B3 | (-63.6, 63.6) |
 | 마운드 | (0, 60.5) |
 | 펜스 거리 | `fenceDist(a) = 330 + 70·cos(2a)` (좌우 330, 중앙 400) |
+| 백스톱 | 홈 뒤 반지름 55ft 호 |
+| 파울 지역 폭 | 파울 라인 ~ 관중석 벽: 홈 근처 55ft → 펜스 코너 20ft로 선형 감소 (`foulWidth(s)`, s = 파울 라인 따라 홈에서 거리) |
+
+### 경기장 경계
+- **경기장 = 페어 지역 + 파울 지역.** 외곽선 = 외야 펜스 → 관중석 벽 → 백스톱 (`playablePolygon()`), 그 밖은 관중석.
+- 화면에는 관중석(회색), 파울 지역(연한 잔디), 페어 지역을 구분해 그리고 벽을 굵은 선으로 표시한다. 1·3루 뒤, 홈 뒤 백업이 **파울 지역이지만 경기장 안**이라는 것을 보여 주기 위함.
+- 모든 수비수 목표 위치와 송구 경로점은 `insidePlayable()` 이어야 한다 (테스트 15).
+- SVG viewBox: `-272 -436 544 506`
 
 ### 정상 수비 기본 위치 (참고값, 튜닝 가능)
 | 번호 | 포지션 | 좌표 |
@@ -164,6 +172,7 @@ interface Plan {
 - `role === 'cover'` 인 assignment는 `base` 필수, **같은 base에 cover 2명 이상 없음**
 - 베이스가 비어 있는 것은 허용 (예: 장타 홈 승부 시 2루, §5-6) — 이 경우 notes에 이유를 적는다
 - `throwPath.length ≥ 1`, `throwPath[0] === ballPoint`
+- 모든 `assignments[*].pos`, `throwPath`, `altThrowPath` 점이 경기장 안 (`insidePlayable`)
 - `target === null` ⇔ `throwPath.length === 1`
 
 ---
@@ -357,6 +366,9 @@ interface Plan {
 - 장타 홈 승부 시 2루: 비움(기본) vs 1루수가 타자 주자 따라 2루 커버 + 3루수 홈 컷오프
 
 ## 11. 변경 이력
+- **v1.3 (2026-11-01)**
+  - §3 경기장 경계 신설: 백스톱, 파울 지역 폭, 관중석 구분, `insidePlayable` 불변 조건
+  - §6 애니메이션 구현 (`hooks/usePlayAnimation.ts`, `components/Play.tsx`). 조작판 전까지는 예시 상황 9개 드롭다운으로 확인
 - **v1.2 (2026-11-01)**
   - §2 기술 스택 React 확정, React 사용 원칙(애니메이션은 ref + rAF) 추가, 폴더 구조 React 기준으로 변경
   - §2-1 배포 신설 (Vercel, 저장소 AeroHong/baseball-hck)

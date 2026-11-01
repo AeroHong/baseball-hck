@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { B1, B2, B3, H, dist } from '../src/geometry';
+import { B1, B2, B3, H, dist, insidePlayable } from '../src/geometry';
 import { computePlan } from '../src/rules';
 import type { Kind, Plan, Point, PosKey, Situation, Shift } from '../src/types';
 import { POS_KEYS } from '../src/types';
@@ -212,8 +212,21 @@ describe('15. 불변 조건 — 전수 검사', () => {
       for (const k of POS_KEYS) {
         const { x, y } = p.assignments[k].pos;
         expect(Number.isFinite(x) && Number.isFinite(y), `${ctx} ${k}`).toBe(true);
+        expect(insidePlayable(p.assignments[k].pos), `${ctx} ${k} 경기장 밖 (${x.toFixed(0)},${y.toFixed(0)})`).toBe(true);
       }
       expect(p.notes.length, ctx).toBeGreaterThanOrEqual(1);
+      for (const q of [...p.throwPath, ...(p.altThrowPath ?? [])]) expect(insidePlayable(q), `${ctx} 경로점`).toBe(true);
     }
+  });
+});
+
+describe('경기장 경계', () => {
+  it('파울 지역은 안, 관중석·펜스 밖은 밖', () => {
+    expect(insidePlayable({ x: 100, y: 55 })).toBe(true); // 1루 뒤 파울 지역
+    expect(insidePlayable({ x: 0, y: -40 })).toBe(true); // 홈 뒤 백스톱 앞
+    expect(insidePlayable({ x: 0, y: -70 })).toBe(false); // 백스톱 뒤
+    expect(insidePlayable({ x: 200, y: 40 })).toBe(false); // 1루 쪽 관중석
+    expect(insidePlayable({ x: 0, y: 410 })).toBe(false); // 중앙 펜스 밖
+    expect(insidePlayable({ x: 0, y: 390 })).toBe(true);
   });
 });

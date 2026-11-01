@@ -5,12 +5,15 @@
   --muted: #6b6a65;
   --border: #e2e0d8;
 
-  --foul-ground: #c9d6b8;
+  --stands: #c4c1b8;
+  --foul-grass: #6fa65a;
   --grass: #5f9a4a;
   --track: #b8875a;
   --dirt: #c8996a;
   --chalk: #ffffff;
   --fence: #2b4a2b;
+  --throw: #ffffff;
+  --hit: #e8730c;
   --base: #ffffff;
 
   --role-ball: #e8730c;
@@ -32,12 +35,15 @@
     --muted: #9c9b95;
     --border: #33322e;
 
-    --foul-ground: #26301f;
+    --stands: #2a2a27;
+    --foul-grass: #355f2f;
     --grass: #2f5a2a;
     --track: #6e5136;
     --dirt: #7d5f42;
     --chalk: #e8e8e2;
-    --fence: #11200f;
+    --fence: #0c180b;
+    --throw: #f4f4ee;
+    --hit: #f08a2c;
     --base: #f0f0ea;
 
     --role-ball: #f08a2c;
@@ -62,6 +68,15 @@ body {
 }
 .app { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
 .app-header h1 { margin: 0; font-size: 1.35rem; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 16px; }
+.toolbar .scoreboard { margin: 0; }
+.toolbar select, .toolbar button {
+  font: inherit; font-size: 0.9rem; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; min-height: 32px;
+}
+.toolbar select { max-width: 100%; }
+.toolbar button { cursor: pointer; }
+.toolbar button:hover { border-color: var(--muted); }
 .scoreboard {
   display: inline-block;
   margin: 8px 0 16px;
@@ -80,13 +95,23 @@ body {
 .field { display: block; width: 100%; height: auto; border-radius: 8px; touch-action: manipulation; }
 
 /* 그라운드 */
-.foul-ground { fill: var(--foul-ground); }
+.stands { fill: var(--stands); }
+.foul-grass { fill: var(--foul-grass); }
+.wall { fill: none; stroke: var(--fence); stroke-width: 4; stroke-linejoin: round; }
+.area-label { fill: var(--fg); opacity: 0.45; font-size: 9px; text-anchor: middle; pointer-events: none; }
 .grass { fill: var(--grass); }
 .track { fill: var(--track); }
 .dirt { fill: var(--dirt); }
 .chalk { stroke: var(--chalk); stroke-width: 1.2; }
-.fence { fill: none; stroke: var(--fence); stroke-width: 4; stroke-linejoin: round; }
 .base, .rubber { fill: var(--base); }
+
+/* 타구·송구 */
+.hit-line { stroke: var(--hit); stroke-width: 2.4; stroke-linecap: round; }
+.throw-path { fill: none; stroke: var(--throw); stroke-width: 2.2; stroke-dasharray: 6 4; stroke-linejoin: round; }
+.alt-path { fill: none; stroke: var(--throw); stroke-width: 1.6; stroke-dasharray: 3 4; opacity: 0.45; }
+.arrowhead { fill: var(--throw); }
+.cut-ring { fill: none; stroke: var(--role-cut); stroke-width: 1.6; stroke-dasharray: 2 2.5; }
+.ball { fill: #ffffff; stroke: #1d1d1b; stroke-width: 1; }
 
 /* 수비수 */
 .fielder circle { stroke: var(--fielder-ring); stroke-width: 2; }
