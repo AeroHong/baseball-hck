@@ -1,1 +1,0 @@
-{"root":["./src/app.tsx","./src/geometry.ts","./src/main.tsx","./src/types.ts","./src/rules/common.ts","./src/rules/extrabase.ts","./src/rules/grounder.ts","./src/rules/index.ts","./src/rules/outfield.ts","./src/rules/target.ts","./tests/rules.test.ts"],"version":"5.6.3"}
