@@ -40,14 +40,25 @@ function BaseSquare({ p, size = 6 }: { p: Point; size?: number }) {
 interface FieldProps {
   children?: ReactNode;
   onPointerDown?: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
 }
 
-export default function Field({ children, onPointerDown }: FieldProps) {
+export default function Field({ children, onPointerDown, onPointerMove, onPointerUp }: FieldProps) {
   const foulL = pt(fenceDist(-45), -45);
   const foulR = pt(fenceDist(45), 45);
   const playable = polyPath(playablePolygon());
   return (
-    <svg className="field" viewBox={VIEWBOX} role="img" aria-label="야구장 그라운드" onPointerDown={onPointerDown}>
+    <svg
+      className="field"
+      viewBox={VIEWBOX}
+      role="img"
+      aria-label="야구장 그라운드"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
       <defs>
         {/* 내야 흙은 파울 라인 바깥으로 조금 넘어가도록 ±52° 쐐기로 자른다 */}
         <clipPath id="infield-clip">

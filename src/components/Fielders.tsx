@@ -9,12 +9,13 @@ interface FieldersProps {
   registerRef?: (k: PosKey, el: SVGGElement | null) => void;
   focus?: PosKey | null;
   onFocus?: (k: PosKey | null) => void;
+  exclude?: PosKey | null;
 }
 
-export default function Fielders({ positions, roles, registerRef, focus, onFocus }: FieldersProps) {
+export default function Fielders({ positions, roles, registerRef, focus, onFocus, exclude }: FieldersProps) {
   return (
     <g className="fielders">
-      {POS_KEYS.map((k) => {
+      {POS_KEYS.filter((k) => k !== exclude).map((k) => {
         const p = positions[k];
         return (
           <g

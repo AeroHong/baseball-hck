@@ -1,6 +1,7 @@
 import type { Plan } from '../types';
 
 export type Theme = 'auto' | 'light' | 'dark';
+export type Mode = 'learn' | 'quiz';
 const THEME_LABEL: Record<Theme, string> = { auto: '◐ 자동', light: '☀ 라이트', dark: '☾ 다크' };
 const NEXT: Record<Theme, Theme> = { auto: 'light', light: 'dark', dark: 'auto' };
 
@@ -9,11 +10,21 @@ interface ScoreboardProps {
   onReplay: () => void;
   theme: Theme;
   onTheme: (t: Theme) => void;
+  mode: Mode;
+  onMode: (m: Mode) => void;
 }
 
-export default function Scoreboard({ plan, onReplay, theme, onTheme }: ScoreboardProps) {
+export default function Scoreboard({ plan, onReplay, theme, onTheme, mode, onMode }: ScoreboardProps) {
   return (
     <div className="toolbar">
+      <div className="segment mode-switch" role="group" aria-label="모드">
+        <button type="button" aria-pressed={mode === 'learn'} onClick={() => onMode('learn')}>
+          학습
+        </button>
+        <button type="button" aria-pressed={mode === 'quiz'} onClick={() => onMode('quiz')}>
+          퀴즈
+        </button>
+      </div>
       <p className="scoreboard" aria-live="polite">
         {plan.title}
       </p>

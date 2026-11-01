@@ -237,3 +237,37 @@ body {
 .team-options .control-row.wide .control-label { font-size: 0.8rem; }
 .hint-inline { margin: 6px 0 0; font-size: 0.8rem; color: var(--muted); }
 .team-options .reset { margin-top: 12px; font: inherit; font-size: 0.85rem; color: var(--fg); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+
+/* 모드 전환 */
+.mode-switch button { font-weight: 600; }
+
+/* 퀴즈 — 그라운드 */
+.mode-quiz .field { cursor: copy; touch-action: none; }
+.quiz-ghost circle { fill: none; stroke: var(--fg); stroke-width: 1.4; stroke-dasharray: 3 2.5; opacity: 0.7; }
+.quiz-ghost text { fill: var(--fg); opacity: 0.7; font-size: 9px; font-weight: 700; text-anchor: middle; }
+.quiz-guess circle { fill: var(--fg); stroke: var(--bg); stroke-width: 2; }
+.quiz-guess text { fill: var(--bg); font-size: 10px; font-weight: 800; text-anchor: middle; pointer-events: none; }
+.quiz-guess.correct circle { fill: var(--role-back); stroke: #fff; }
+.quiz-guess.close circle { fill: #d9a400; stroke: #fff; }
+.quiz-guess.wrong circle { fill: #d92d20; stroke: #fff; }
+.quiz-guess.correct text, .quiz-guess.close text, .quiz-guess.wrong text { fill: #fff; }
+.quiz-answer circle { stroke: #fff; stroke-width: 2.5; }
+.quiz-error { stroke: var(--fg); stroke-width: 1.4; stroke-dasharray: 2 2; }
+.quiz-error-label { fill: var(--fg); font-size: 9px; font-weight: 700; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+
+/* 퀴즈 — 패널 */
+.quiz-panel + section { margin-top: 20px; }
+.quiz-question { margin: 0 0 6px; font-size: 1.05rem; }
+.quiz-actions { margin: 14px 0 10px; }
+.quiz-actions .primary {
+  font: inherit; font-weight: 700; color: var(--bg); background: var(--fg); border: 0; border-radius: 8px;
+  padding: 8px 18px; min-height: 40px; cursor: pointer;
+}
+.quiz-actions .primary:disabled { opacity: 0.35; cursor: not-allowed; }
+.quiz-result { margin-top: 10px; padding: 10px 12px; border-radius: 8px; border-left: 4px solid; background: var(--bg); }
+.quiz-result strong { font-size: 1.1rem; margin-right: 6px; }
+.quiz-result.correct { border-color: var(--role-back); }
+.quiz-result.close { border-color: #d9a400; }
+.quiz-result.wrong { border-color: #d92d20; }
+.quiz-answer-text { margin-top: 4px; font-size: 0.9rem; color: var(--muted); }
+.quiz-score { margin: 0; font-size: 0.85rem; color: var(--muted); }

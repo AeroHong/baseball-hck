@@ -12,10 +12,12 @@ interface PlayProps {
   replayKey: number;
   focus: PosKey | null;
   onFocus: (k: PosKey | null) => void;
+  /** 퀴즈 문제 수비수: 그리지 않는다 (QuizLayer 가 대신 그림) */
+  exclude?: PosKey | null;
 }
 
 /** 타구 선 · 송구 경로 · 대체 경로 · 수비수 · 공. 위치는 usePlayAnimation 이 직접 갱신 */
-export default function Play({ plan, start, replayKey, focus, onFocus }: PlayProps) {
+export default function Play({ plan, start, replayKey, focus, onFocus, exclude = null }: PlayProps) {
   const refs = useRef<PlayRefs>({ fielders: {}, ball: null, hit: null, throwGroup: null, altGroup: null, runners: {}, results: {} });
   usePlayAnimation(refs, plan, start, replayKey);
 
@@ -57,7 +59,7 @@ export default function Play({ plan, start, replayKey, focus, onFocus }: PlayPro
         ))}
       </g>
 
-      <Fielders positions={start} roles={roles} registerRef={registerFielder} focus={focus} onFocus={onFocus} />
+      <Fielders positions={start} roles={roles} registerRef={registerFielder} focus={focus} onFocus={onFocus} exclude={exclude} />
 
       <RunnerMarkers moves={plan.runnerMoves} registerRunner={registerRunner} registerResult={registerResult} />
 
