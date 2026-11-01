@@ -71,10 +71,9 @@ tests/
 
 ## 2-1. 배포
 - 저장소: `https://github.com/AeroHong/baseball-hck` (기본 브랜치 `main`)
-- 호스팅: **GitHub Pages**, GitHub Actions로 `main` push 시 자동 빌드·배포 (`.github/workflows/deploy.yml`)
-- 주소: `https://aerohong.github.io/baseball-hck/` → `vite.config.ts` 의 `base: '/baseball-hck/'`
-- 워크플로: `npm ci` → `npm test` → `npm run build` → `dist/` 업로드. **테스트 실패 시 배포 안 함.**
-- 최초 1회: 저장소 Settings → Pages → Source를 "GitHub Actions"로 설정
+- 호스팅: **Vercel** (저장소 연결됨). `main` push → 프로덕션 배포, 다른 브랜치 push → 프리뷰 배포
+- 설정: `vercel.json` — `npm ci` → `npm test && npm run build` → `dist/`. **테스트 실패 시 빌드 실패 = 배포 안 함.**
+- 루트 경로(`/`)에서 서비스하므로 `vite.config.ts` 에 `base` 설정 없음
 
 ---
 
@@ -342,7 +341,7 @@ interface Plan {
 
 ## 9. 작업 순서 제안 (Claude Code 프롬프트 단위)
 
-1. 프로젝트 생성(Vite+React+TS), `geometry.ts`·`types.ts` 작성, 배포 워크플로 구성
+1. 프로젝트 생성(Vite+React+TS), `geometry.ts`·`types.ts` 작성, Vercel 배포 설정
 2. `rules/` 구현 + 위 테스트 23개 작성 → 전부 통과
 3. 그라운드 SVG 렌더 + 기본 위치 표시
 4. 애니메이션 + 송구 경로
@@ -359,7 +358,7 @@ interface Plan {
 ## 11. 변경 이력
 - **v1.2 (2026-11-01)**
   - §2 기술 스택 React 확정, React 사용 원칙(애니메이션은 ref + rAF) 추가, 폴더 구조 React 기준으로 변경
-  - §2-1 배포 신설 (GitHub Pages + Actions, 저장소 AeroHong/baseball-hck)
+  - §2-1 배포 신설 (Vercel, 저장소 AeroHong/baseball-hck)
 - **v1.1 (2026-11-01)**
   - `Plan`에 `altThrowPath`, `target` 추가, `Assignment`에 `base` 추가
   - §4 불변 조건 신설 (커버 중복 금지, 빈 베이스 허용 조건, throwPath 최소 길이)
