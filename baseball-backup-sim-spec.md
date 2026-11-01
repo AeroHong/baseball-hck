@@ -71,6 +71,7 @@ tests/
 
 ## 2-1. 배포
 - 저장소: `https://github.com/AeroHong/baseball-hck` (기본 브랜치 `main`)
+- 주소: **https://baseball-hck.vercel.app**
 - 호스팅: **Vercel** (저장소 연결됨). `main` push → 프로덕션 배포, 다른 브랜치 push → 프리뷰 배포
 - 설정: `vercel.json` — `npm ci` → `npm test && npm run build` → `dist/`. **테스트 실패 시 빌드 실패 = 배포 안 함.**
 - 루트 경로(`/`)에서 서비스하므로 `vite.config.ts` 에 `base` 설정 없음
