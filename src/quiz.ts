@@ -9,12 +9,27 @@ export interface Question {
 }
 
 export type Grade = 'correct' | 'close' | 'wrong';
+export type Difficulty = 'easy' | 'normal' | 'hard';
 
-export const CORRECT_FT = 12;
-export const CLOSE_FT = 30;
+/** 난이도별 채점 기준(ft). 쉬움은 역할 힌트도 보여 준다 */
+export const THRESHOLDS: Record<Difficulty, { correct: number; close: number }> = {
+  easy: { correct: 15, close: 35 },
+  normal: { correct: 12, close: 30 },
+  hard: { correct: 8, close: 20 },
+};
+export const DIFFICULTY_NAME: Record<Difficulty, string> = { easy: '쉬움', normal: '보통', hard: '어려움' };
+
+/** 하위 호환: 보통 난이도 기준 */
+export const CORRECT_FT = THRESHOLDS.normal.correct;
+export const CLOSE_FT = THRESHOLDS.normal.close;
+
+/** 문제당 점수 */
+export const POINTS: Record<Grade, number> = { correct: 10, close: 5, wrong: 0 };
+export const MAX_POINTS = POINTS.correct;
+
 const MIN_MOVE_FT = 15;
 
-const KINDS: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt'];
+export const QUIZ_KINDS: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt'];
 const pick = <T,>(arr: readonly T[], rand: () => number): T => arr[Math.floor(rand() * arr.length) % arr.length];
 
 /** 문제 수비수 후보: 커버·중계·백업 역할이면서 시작 위치에서 15ft 이상 움직이는 수비수 */
@@ -27,27 +42,80 @@ export function candidates(s: Situation, options: Options): PosKey[] {
   });
 }
 
-/** §12-5 무작위 문제. rand 를 넘기면 결정적으로 만들 수 있다 (테스트용) */
-export function makeQuestion(options: Options, rand: () => number = Math.random): Question {
-  for (let tries = 0; tries < 100; tries++) {
-    const m = Math.floor(rand() * 8);
-    const runners = { 1: !!(m & 1), 2: !!(m & 2), 3: !!(m & 4) };
-    const outs = pick([0, 1, 2] as const, rand);
-    const shift = runners[1] && outs < 2 && rand() < 0.5 ? 'dp' : 'normal';
-    const situation: Situation = { kind: pick(KINDS, rand), angle: pick(DIRECTIONS, rand).angle, runners, outs, shift };
+function randomSituation(rand: () => number): Situation {
+  const m = Math.floor(rand() * 8);
+  const runners = { 1: !!(m & 1), 2: !!(m & 2), 3: !!(m & 4) };
+  const outs = pick([0, 1, 2] as const, rand);
+  const shift = runners[1] && outs < 2 && rand() < 0.5 ? 'dp' : 'normal';
+  return { kind: pick(QUIZ_KINDS, rand), angle: pick(DIRECTIONS, rand).angle, runners, outs, shift };
+}
+
+/** 전체 상황 목록 (특정 포지션 문제가 드물 때 대비) */
+function allSituations(): Situation[] {
+  const out: Situation[] = [];
+  for (const kind of QUIZ_KINDS)
+    for (const d of DIRECTIONS)
+      for (let m = 0; m < 8; m++)
+        for (const outs of [0, 1, 2] as const) {
+          const runners = { 1: !!(m & 1), 2: !!(m & 2), 3: !!(m & 4) };
+          out.push({ kind, angle: d.angle, runners, outs, shift: 'normal' });
+          if (runners[1] && outs < 2) out.push({ kind, angle: d.angle, runners, outs, shift: 'dp' });
+        }
+  return out;
+}
+
+/**
+ * §12-5 무작위 문제. position 을 주면 그 수비수가 움직이는 상황만 낸다 (포지션 맞춤 퀴즈).
+ * rand 를 넘기면 결정적으로 만들 수 있다 (테스트용)
+ */
+export function makeQuestion(options: Options, rand: () => number = Math.random, position: PosKey | null = null): Question {
+  for (let tries = 0; tries < 300; tries++) {
+    const situation = randomSituation(rand);
     const c = candidates(situation, options);
-    if (c.length) return { situation, fielder: pick(c, rand) };
+    if (position) {
+      if (c.includes(position)) return { situation, fielder: position };
+    } else if (c.length) return { situation, fielder: pick(c, rand) };
   }
-  // 이론상 도달하지 않음: 항상 후보가 있는 고정 문제
+  // 드문 포지션(포수 등): 전수에서 고른다
+  const pool = allSituations().filter((s) => {
+    const c = candidates(s, options);
+    return position ? c.includes(position) : c.length > 0;
+  });
+  if (pool.length) {
+    const situation = pick(pool, rand);
+    return { situation, fielder: position ?? pick(candidates(situation, options), rand) };
+  }
   return {
     situation: { kind: 'single', angle: -27, runners: { 1: false, 2: true, 3: false }, outs: 1, shift: 'normal' },
     fielder: '3B',
   };
 }
 
-export function grade(guess: Point, answer: Point): { grade: Grade; error: number } {
+const questionKey = (q: Question) => `${q.fielder}|${JSON.stringify(q.situation)}`;
+
+/** 한 판(count 문제). 같은 문제는 되도록 겹치지 않게 */
+export function makeRun(
+  options: Options,
+  count: number,
+  position: PosKey | null = null,
+  rand: () => number = Math.random,
+): Question[] {
+  const out: Question[] = [];
+  const seen = new Set<string>();
+  for (let tries = 0; out.length < count && tries < count * 20; tries++) {
+    const q = makeQuestion(options, rand, position);
+    const key = questionKey(q);
+    if (seen.has(key) && tries < count * 10) continue;
+    seen.add(key);
+    out.push(q);
+  }
+  return out;
+}
+
+export function grade(guess: Point, answer: Point, difficulty: Difficulty = 'normal'): { grade: Grade; error: number } {
   const error = dist(guess, answer);
-  return { grade: error <= CORRECT_FT ? 'correct' : error <= CLOSE_FT ? 'close' : 'wrong', error };
+  const t = THRESHOLDS[difficulty];
+  return { grade: error <= t.correct ? 'correct' : error <= t.close ? 'close' : 'wrong', error };
 }
 
 /** 테스트·재현용 결정적 난수 (mulberry32) */

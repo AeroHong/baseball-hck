@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { usePlayAnimation, type PlayRefs } from '../hooks/usePlayAnimation';
+import type { Timeline } from '../timeline';
 import type { Plan, Point, PosKey, Role } from '../types';
 import { POS_KEYS } from '../types';
 import { sx, sy, xy } from './Field';
@@ -10,6 +11,7 @@ interface PlayProps {
   plan: Plan;
   start: Record<PosKey, Point>;
   replayKey: number;
+  timeline: Timeline;
   focus: PosKey | null;
   onFocus: (k: PosKey | null) => void;
   /** 퀴즈 문제 수비수: 그리지 않는다 (QuizLayer 가 대신 그림) */
@@ -17,9 +19,9 @@ interface PlayProps {
 }
 
 /** 타구 선 · 송구 경로 · 대체 경로 · 수비수 · 공. 위치는 usePlayAnimation 이 직접 갱신 */
-export default function Play({ plan, start, replayKey, focus, onFocus, exclude = null }: PlayProps) {
+export default function Play({ plan, start, replayKey, timeline, focus, onFocus, exclude = null }: PlayProps) {
   const refs = useRef<PlayRefs>({ fielders: {}, ball: null, hit: null, throwGroup: null, altGroup: null, runners: {}, results: {} });
-  usePlayAnimation(refs, plan, start, replayKey);
+  usePlayAnimation(refs, plan, start, replayKey, timeline);
 
   const roles = useMemo(
     () => Object.fromEntries(POS_KEYS.map((k) => [k, plan.assignments[k].role])) as Record<PosKey, Role>,

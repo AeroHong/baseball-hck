@@ -1,7 +1,7 @@
 import type { Plan } from '../types';
 
 export type Theme = 'auto' | 'light' | 'dark';
-export type Mode = 'learn' | 'quiz';
+export type Mode = 'learn' | 'quiz' | 'stats';
 const THEME_LABEL: Record<Theme, string> = { auto: '◐ 자동', light: '☀ 라이트', dark: '☾ 다크' };
 const NEXT: Record<Theme, Theme> = { auto: 'light', light: 'dark', dark: 'auto' };
 
@@ -24,13 +24,20 @@ export default function Scoreboard({ plan, onReplay, theme, onTheme, mode, onMod
         <button type="button" aria-pressed={mode === 'quiz'} onClick={() => onMode('quiz')}>
           퀴즈
         </button>
+        <button type="button" aria-pressed={mode === 'stats'} onClick={() => onMode('stats')}>
+          기록
+        </button>
       </div>
-      <p className="scoreboard" aria-live="polite">
-        {plan.title}
-      </p>
-      <button type="button" onClick={onReplay}>
-        ↻ 다시 재생
-      </button>
+      {mode !== 'stats' && (
+        <>
+          <p className="scoreboard" aria-live="polite">
+            {plan.title}
+          </p>
+          <button type="button" onClick={onReplay}>
+            ↻ 다시 재생
+          </button>
+        </>
+      )}
       <button type="button" className="theme-btn" onClick={() => onTheme(NEXT[theme])} aria-label={`테마: ${THEME_LABEL[theme]}`}>
         {THEME_LABEL[theme]}
       </button>

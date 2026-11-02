@@ -1,26 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Controls from './components/Controls';
+import Dashboard from './components/Dashboard';
 import Field from './components/Field';
+import PlaybackBar from './components/PlaybackBar';
 import Play from './components/Play';
 import QuizLayer from './components/QuizLayer';
-import QuizPanel, { type QuizScore } from './components/QuizPanel';
+import QuizPanel from './components/QuizPanel';
+import QuizResult from './components/QuizResult';
+import QuizSetup, { COUNTS, type QuizSettings } from './components/QuizSetup';
 import RoleCards from './components/RoleCards';
 import Runners from './components/Runners';
 import Scoreboard, { type Mode, type Theme } from './components/Scoreboard';
 import Summary from './components/Summary';
 import TeamOptions from './components/TeamOptions';
 import { startPositions } from './geometry';
-import { grade, makeQuestion, type Question } from './quiz';
+import { grade, makeRun, type Question } from './quiz';
+import {
+  EMPTY_STORE,
+  addSession,
+  leaderboard,
+  parseStore,
+  playerStats,
+  removePlayer,
+  setPlayerPosition,
+  tally,
+  upsertPlayer,
+  type AnswerRecord,
+  type RecordStore,
+} from './records';
 import { computePlan } from './rules';
 import { applyClick, fromQuery, interpretClick, toQuery } from './situation';
+import { Timeline } from './timeline';
 import type { Options, Point, PosKey, Role, Situation } from './types';
-import { DEFAULT_OPTIONS, POS_NUMBER, ROLE_NAME } from './types';
+import { DEFAULT_OPTIONS, POS_KEYS, POS_NUMBER, ROLE_NAME } from './types';
 
 const LEGEND: Role[] = ['ball', 'cover', 'cut', 'back', 'stand'];
 const THEME_KEY = 'baseball-hck:theme';
 const OPTIONS_KEY = 'baseball-hck:options';
-const QUIZ_KEY = 'baseball-hck:quiz';
-const ZERO: QuizScore = { correct: 0, close: 0, wrong: 0 };
+const RECORDS_KEY = 'baseball-hck:records';
+const SETTINGS_KEY = 'baseball-hck:quiz-settings';
+const DEFAULT_SETTINGS: QuizSettings = { position: null, count: 10, difficulty: 'normal' };
 
 function load<T>(key: string, fallback: T, parse: (raw: string) => T | null): T {
   try {
@@ -47,9 +66,13 @@ function parseOptions(raw: string): Options | null {
   }
   return out;
 }
-function parseScore(raw: string): QuizScore | null {
-  const o = JSON.parse(raw) as Partial<QuizScore>;
-  return { correct: Number(o.correct) || 0, close: Number(o.close) || 0, wrong: Number(o.wrong) || 0 };
+function parseSettings(raw: string): QuizSettings | null {
+  const o = JSON.parse(raw) as Partial<QuizSettings>;
+  return {
+    position: POS_KEYS.includes(o.position as PosKey) ? (o.position as PosKey) : null,
+    count: COUNTS.includes(o.count as (typeof COUNTS)[number]) ? (o.count as number) : DEFAULT_SETTINGS.count,
+    difficulty: o.difficulty === 'easy' || o.difficulty === 'hard' ? o.difficulty : 'normal',
+  };
 }
 
 /** 화면 좌표 → 필드 좌표(ft) */
@@ -64,9 +87,19 @@ function toFieldPoint(e: React.PointerEvent<SVGSVGElement>): Point | null {
   return { x: p.x, y: -p.y };
 }
 
-interface QuizState extends Question {
+/** 한 판의 진행 상태 */
+interface QuizRun {
+  playerId: string;
+  settings: QuizSettings;
+  retry: boolean;
+  questions: Question[];
+  index: number;
   guess: Point | null;
   revealed: boolean;
+  answers: AnswerRecord[];
+  done: boolean;
+  /** 이 판 시작 전 개인 최고 점수율 */
+  prevBest: number;
 }
 
 export default function App() {
@@ -76,13 +109,15 @@ export default function App() {
   const [focus, setFocus] = useState<PosKey | null>(null);
   const [theme, setTheme] = useState<Theme>(() => load(THEME_KEY, 'auto', parseTheme));
   const [options, setOptions] = useState<Options>(() => load(OPTIONS_KEY, DEFAULT_OPTIONS, parseOptions));
-  const [quiz, setQuiz] = useState<QuizState | null>(null);
-  const [session, setSession] = useState<QuizScore>(ZERO);
-  const [total, setTotal] = useState<QuizScore>(() => load(QUIZ_KEY, ZERO, parseScore));
+  const [store, setStore] = useState<RecordStore>(() => load(RECORDS_KEY, EMPTY_STORE, parseStore));
+  const [settings, setSettings] = useState<QuizSettings>(() => load(SETTINGS_KEY, DEFAULT_SETTINGS, parseSettings));
+  const [run, setRun] = useState<QuizRun | null>(null);
+  const [timeline] = useState(() => new Timeline());
   const dragging = useRef(false);
 
-  const inQuiz = mode === 'quiz' && quiz !== null;
-  const active = inQuiz ? quiz.situation : situation;
+  const current = store.players.find((p) => p.id === store.currentId) ?? null;
+  const question = mode === 'quiz' && run && !run.done ? run.questions[run.index] : null;
+  const active = question ? question.situation : situation;
   const plan = useMemo(() => computePlan(active, options), [active, options]);
   const start = useMemo(() => startPositions(active.shift), [active.shift]);
 
@@ -99,50 +134,126 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => save(OPTIONS_KEY, JSON.stringify(options)), [options]);
-  useEffect(() => save(QUIZ_KEY, JSON.stringify(total)), [total]);
+  useEffect(() => save(RECORDS_KEY, JSON.stringify(store)), [store]);
+  useEffect(() => save(SETTINGS_KEY, JSON.stringify(settings)), [settings]);
 
-  const newQuestion = () => {
-    setQuiz({ ...makeQuestion(options), guess: null, revealed: false });
+  /* ── 퀴즈 진행 ── */
+
+  const startRun = (questions: Question[], retry: boolean, s: QuizSettings = settings) => {
+    if (!current || !questions.length) return;
+    setRun({
+      playerId: current.id,
+      settings: s,
+      retry,
+      questions,
+      index: 0,
+      guess: null,
+      revealed: false,
+      answers: [],
+      done: false,
+      prevBest: playerStats(store, current.id)?.best ?? 0,
+    });
+    setFocus(null);
+  };
+  const startNew = () => startRun(makeRun(options, settings.count, settings.position), false);
+  const retryWrong = () => {
+    if (!run) return;
+    const qs = run.answers.filter((a) => a.grade !== 'correct').map(({ situation: s, fielder }) => ({ situation: s, fielder }));
+    startRun(qs, true, run.settings);
+  };
+
+  const finish = (r: QuizRun) => {
+    if (r.answers.length) {
+      setStore((st) =>
+        addSession(st, {
+          playerId: r.playerId,
+          date: Date.now(),
+          position: r.settings.position,
+          difficulty: r.settings.difficulty,
+          retry: r.retry,
+          answers: r.answers,
+        }),
+      );
+    }
+  };
+
+  const result = question && run?.guess ? grade(run.guess, plan.assignments[question.fielder].pos, run.settings.difficulty) : null;
+
+  const reveal = () => {
+    if (!run || !question || !result || run.revealed) return;
+    const rec: AnswerRecord = { situation: question.situation, fielder: question.fielder, grade: result.grade, error: result.error };
+    setRun({ ...run, revealed: true, answers: [...run.answers, rec] });
+  };
+
+  const next = () => {
+    if (!run) return;
+    if (run.index + 1 >= run.questions.length) {
+      const done = { ...run, done: true };
+      finish(done);
+      setRun(done);
+    } else {
+      setRun({ ...run, index: run.index + 1, guess: null, revealed: false });
+    }
+    setFocus(null);
+  };
+
+  const quit = () => {
+    if (run && !run.done) finish(run);
+    setRun(null);
+  };
+
+  const review = (s: Situation) => {
+    setSituation(s);
+    setMode('learn');
     setFocus(null);
   };
 
   const changeMode = (m: Mode) => {
     setMode(m);
     setFocus(null);
-    if (m === 'quiz' && !quiz) newQuestion();
   };
 
-  const result = inQuiz && quiz.guess ? grade(quiz.guess, plan.assignments[quiz.fielder].pos) : null;
+  /* ── 선수 ── */
 
-  const reveal = () => {
-    if (!inQuiz || !result || quiz.revealed) return;
-    setQuiz({ ...quiz, revealed: true });
-    const add = (s: QuizScore) => ({ ...s, [result.grade]: s[result.grade] + 1 });
-    setSession(add);
-    setTotal(add);
+  const selectPlayer = (id: string | null) => {
+    setStore((st) => ({ ...st, currentId: id }));
+    const pl = store.players.find((p) => p.id === id);
+    if (pl) setSettings((s) => ({ ...s, position: pl.position }));
   };
+  const register = (name: string) => setStore((st) => upsertPlayer(st, name, settings.position).store);
+  const changeSettings = (s: QuizSettings) => {
+    setSettings(s);
+    if (current && s.position !== current.position) setStore((st) => setPlayerPosition(st, current.id, s.position));
+  };
+
+  /* ── 그라운드 입력 ── */
 
   const onFieldPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     const p = toFieldPoint(e);
     if (!p) return;
-    if (inQuiz) {
-      if (quiz.revealed) return;
+    if (mode === 'quiz') {
+      if (!run || !question || run.revealed) return;
       dragging.current = true;
       e.currentTarget.setPointerCapture(e.pointerId);
-      setQuiz({ ...quiz, guess: p });
+      setRun({ ...run, guess: p });
       return;
     }
     const click = interpretClick(p);
     if (click) setSituation((s) => applyClick(s, click));
   };
   const onFieldPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!inQuiz || !dragging.current || quiz.revealed) return;
+    if (!run || !question || !dragging.current || run.revealed) return;
     const p = toFieldPoint(e);
-    if (p) setQuiz({ ...quiz, guess: p });
+    if (p) setRun({ ...run, guess: p });
   };
   const onFieldPointerUp = () => {
     dragging.current = false;
   };
+
+  const runTally = tally(run?.answers ?? []);
+  const board = mode === 'quiz' && run?.done ? leaderboard(store) : [];
+  const myRank = board.find((r) => r.player.id === run?.playerId)?.rank ?? null;
+  const runPlayer = store.players.find((p) => p.id === run?.playerId);
 
   return (
     <div className={`app mode-${mode}`}>
@@ -158,79 +269,130 @@ export default function App() {
         />
       </header>
 
-      <div className="layout">
-        <section className="field-wrap" aria-label="그라운드">
-          <Field onPointerDown={onFieldPointerDown} onPointerMove={onFieldPointerMove} onPointerUp={onFieldPointerUp}>
-            <Play
-              key={inQuiz ? `quiz-${quiz.fielder}-${JSON.stringify(quiz.situation)}` : 'learn'}
-              plan={plan}
-              start={start}
-              replayKey={replayKey}
-              focus={focus}
-              onFocus={setFocus}
-              exclude={inQuiz ? quiz.fielder : null}
-            />
-            {inQuiz ? (
-              <QuizLayer
-                number={POS_NUMBER[quiz.fielder]}
-                start={start[quiz.fielder]}
-                guess={quiz.guess}
-                answer={quiz.revealed ? plan.assignments[quiz.fielder].pos : null}
-                answerRole={plan.assignments[quiz.fielder].role}
-                grade={quiz.revealed && result ? result.grade : null}
-                error={quiz.revealed && result ? result.error : null}
+      {mode === 'stats' ? (
+        <Dashboard
+          store={store}
+          onSelect={(id) => setStore((st) => ({ ...st, currentId: id }))}
+          onRemove={(id) => setStore((st) => removePlayer(st, id))}
+          onStartQuiz={() => changeMode('quiz')}
+          onReview={review}
+        />
+      ) : (
+        <div className="layout">
+          <section className="field-wrap" aria-label="그라운드">
+            <Field onPointerDown={onFieldPointerDown} onPointerMove={onFieldPointerMove} onPointerUp={onFieldPointerUp}>
+              <Play
+                key={question ? `quiz-${run!.index}-${question.fielder}-${JSON.stringify(question.situation)}` : 'learn'}
+                plan={plan}
+                start={start}
+                replayKey={replayKey}
+                timeline={timeline}
+                focus={focus}
+                onFocus={setFocus}
+                exclude={question ? question.fielder : null}
               />
-            ) : (
-              <Runners runners={situation.runners} />
-            )}
-          </Field>
-          <ul className="legend">
-            {LEGEND.map((r) => (
-              <li key={r} className={`role-${r}`}>
-                <span className="dot" />
-                {ROLE_NAME[r]}
-              </li>
-            ))}
-          </ul>
-          <p className="hint">
-            {inQuiz
-              ? '그라운드를 눌러 위치를 찍고 끌어서 조정하세요.'
-              : '그라운드를 누르면 타구 방향, 베이스를 누르면 주자 추가·제거. 내야(홈에서 135ft 이내)는 땅볼.'}
-          </p>
-        </section>
-
-        <div className="panel">
-          {inQuiz ? (
-            <>
-              <QuizPanel
-                fielder={quiz.fielder}
-                hasGuess={quiz.guess !== null}
-                revealed={quiz.revealed}
-                grade={result?.grade ?? null}
-                error={result?.error ?? null}
-                answer={plan.assignments[quiz.fielder]}
-                session={session}
-                total={total}
-                onReveal={reveal}
-                onNext={newQuestion}
-              />
-              {quiz.revealed && (
-                <>
-                  <Summary plan={plan} />
-                  <RoleCards plan={plan} focus={focus} onFocus={setFocus} />
-                </>
+              {question && run ? (
+                <QuizLayer
+                  number={POS_NUMBER[question.fielder]}
+                  start={start[question.fielder]}
+                  guess={run.guess}
+                  answer={run.revealed ? plan.assignments[question.fielder].pos : null}
+                  answerRole={plan.assignments[question.fielder].role}
+                  grade={run.revealed && result ? result.grade : null}
+                  error={run.revealed && result ? result.error : null}
+                />
+              ) : (
+                mode === 'learn' && <Runners runners={situation.runners} />
               )}
-            </>
-          ) : (
-            <>
-              <Controls situation={situation} onChange={setSituation} />
-              <Summary plan={plan} />
-              <RoleCards plan={plan} focus={focus} onFocus={setFocus} />
-              <TeamOptions options={options} onChange={setOptions} />
-            </>
-          )}
+            </Field>
+            <PlaybackBar timeline={timeline} />
+            <ul className="legend">
+              {LEGEND.map((r) => (
+                <li key={r} className={`role-${r}`}>
+                  <span className="dot" />
+                  {ROLE_NAME[r]}
+                </li>
+              ))}
+            </ul>
+            <p className="hint">
+              {mode === 'quiz'
+                ? question
+                  ? '그라운드를 눌러 위치를 찍고 끌어서 조정하세요.'
+                  : '오른쪽에서 선수·포지션·문항 수를 고르고 시작하세요.'
+                : '그라운드를 누르면 타구 방향, 베이스를 누르면 주자 추가·제거. 내야(홈에서 135ft 이내)는 땅볼.'}
+            </p>
+          </section>
+
+          <div className="panel">
+            {mode === 'quiz' ? (
+              !run ? (
+                <QuizSetup
+                  players={store.players}
+                  current={current}
+                  settings={settings}
+                  onSettings={changeSettings}
+                  onSelectPlayer={selectPlayer}
+                  onRegister={register}
+                  onStart={startNew}
+                />
+              ) : run.done ? (
+                <QuizResult
+                  playerName={runPlayer?.name ?? ''}
+                  answers={run.answers}
+                  tally={runTally}
+                  retry={run.retry}
+                  prevBest={run.prevBest}
+                  rank={myRank}
+                  players={board.length}
+                  onRestart={() => startRun(makeRun(options, run.settings.count, run.settings.position), false, run.settings)}
+                  onRetryWrong={retryWrong}
+                  onSetup={() => setRun(null)}
+                  onDashboard={() => {
+                    setRun(null);
+                    changeMode('stats');
+                  }}
+                  onReview={review}
+                />
+              ) : (
+                question && (
+                  <>
+                    <QuizPanel
+                      playerName={runPlayer?.name ?? ''}
+                      fielder={question.fielder}
+                      index={run.index}
+                      count={run.questions.length}
+                      difficulty={run.settings.difficulty}
+                      retry={run.retry}
+                      hasGuess={run.guess !== null}
+                      revealed={run.revealed}
+                      grade={result?.grade ?? null}
+                      error={result?.error ?? null}
+                      answer={plan.assignments[question.fielder]}
+                      run={runTally}
+                      onReveal={reveal}
+                      onNext={next}
+                      onQuit={quit}
+                    />
+                    {run.revealed && (
+                      <>
+                        <Summary plan={plan} />
+                        <RoleCards plan={plan} focus={focus} onFocus={setFocus} />
+                      </>
+                    )}
+                  </>
+                )
+              )
+            ) : (
+              <>
+                <Controls situation={situation} onChange={setSituation} />
+                <Summary plan={plan} />
+                <RoleCards plan={plan} focus={focus} onFocus={setFocus} />
+                <TeamOptions options={options} onChange={setOptions} />
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

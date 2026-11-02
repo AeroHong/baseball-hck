@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { H, dist, lerp, pointAlong, runnerSpot } from '../geometry';
+import type { Timeline } from '../timeline';
 import type { Plan, Point, PosKey } from '../types';
 import { POS_KEYS } from '../types';
 
@@ -27,14 +28,15 @@ const easeInOutQuad = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 
 const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 
 /**
- * rAF 로 SVG 요소 속성을 직접 갱신한다. React state 는 건드리지 않는다.
- * plan·start·replayKey 가 바뀌면 처음부터 다시 재생.
+ * SVG 요소 속성을 직접 갱신한다. React state 는 건드리지 않는다.
+ * 시간은 Timeline 이 흘린다(일시정지·속도·구간 이동). plan·start·replayKey 가 바뀌면 처음부터 다시 재생.
  */
 export function usePlayAnimation(
   refs: MutableRefObject<PlayRefs>,
   plan: Plan,
   start: Record<PosKey, Point>,
   replayKey: number,
+  timeline: Timeline,
 ) {
   useEffect(() => {
     const r = refs.current;
@@ -79,21 +81,7 @@ export function usePlayAnimation(
       }
     };
 
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) {
-      render(T1 + T2);
-      return;
-    }
-
-    let raf = 0;
-    const t0 = performance.now();
-    const frame = (now: number) => {
-      const t = now - t0;
-      render(t);
-      if (t < T1 + T2) raf = requestAnimationFrame(frame);
-    };
-    render(0);
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
-  }, [refs, plan, start, replayKey]);
+    const reduce = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    return timeline.attach(render, T1 + T2, reduce);
+  }, [refs, plan, start, replayKey, timeline]);
 }
