@@ -13,7 +13,7 @@ import Runners from './components/Runners';
 import Scoreboard, { type Mode, type Theme } from './components/Scoreboard';
 import Summary from './components/Summary';
 import TeamOptions from './components/TeamOptions';
-import type { CloudSnapshot, CloudStatus } from './cloud';
+import type { AuthState, CloudSnapshot, CloudStatus } from './cloud';
 import { startPositions } from './geometry';
 import { grade, makeRun, type Question } from './quiz';
 import {
@@ -22,13 +22,13 @@ import {
   leaderboard,
   newId,
   parseStore,
+  playerKey,
   playerStats,
   removePlayer,
   setPlayerPosition,
   tally,
   upsertPlayer,
   type AnswerRecord,
-  type Player,
   type RecordStore,
   type SessionRecord,
 } from './records';
@@ -121,20 +121,21 @@ export default function App() {
   const [cloud, setCloud] = useState<CloudSnapshot | null>(null);
   const [cloudStatus, setCloudStatus] = useState<CloudStatus>('connecting');
   const [currentId, setCurrentId] = useState<string | null>(() => load(CURRENT_KEY, local.currentId, (raw) => raw));
-  const synced = useRef(false);
-  const localRef = useRef(local);
-  localRef.current = local;
+  const [authState, setAuthState] = useState<AuthState | null>(null);
   const [settings, setSettings] = useState<QuizSettings>(() => load(SETTINGS_KEY, DEFAULT_SETTINGS, parseSettings));
   const [run, setRun] = useState<QuizRun | null>(null);
   const [timeline] = useState(() => new Timeline());
   const dragging = useRef(false);
 
-  const store: RecordStore = useMemo(() => {
-    const base = cloud && cloudStatus !== 'error' ? { players: cloud.players, sessions: cloud.sessions } : local;
-    return { version: 1, players: base.players, sessions: base.sessions, currentId: base.players.some((p) => p.id === currentId) ? currentId : null };
-  }, [cloud, cloudStatus, local, currentId]);
   const cloudOn = cloudStatus !== 'error';
-  const [myUid, setMyUid] = useState<string | null>(null);
+  // 클라우드: 현재 선수 = PIN 으로 로그인한 계정의 선수. 로컬(장애 시): 고른 선수
+  const store: RecordStore = useMemo(() => {
+    if (cloud && cloudOn) {
+      const me = authState && !authState.anonymous ? cloud.players.find((p) => p.ownerUid === authState.uid) : undefined;
+      return { version: 1, players: cloud.players, sessions: cloud.sessions, currentId: me?.id ?? null };
+    }
+    return { ...local, currentId: local.players.some((p) => p.id === currentId) ? currentId : null };
+  }, [cloud, cloudOn, local, currentId, authState]);
 
   const current = store.players.find((p) => p.id === store.currentId) ?? null;
   const question = mode === 'quiz' && run && !run.done ? run.questions[run.index] : null;
@@ -158,7 +159,7 @@ export default function App() {
   useEffect(() => save(RECORDS_KEY, JSON.stringify(local)), [local]);
   useEffect(() => save(CURRENT_KEY, currentId ?? ''), [currentId]);
 
-  // 클라우드 구독. 처음 서버와 연결되면 기기에만 있는 기록을 올린다
+  // 클라우드 구독 + 로그인 상태
   useEffect(() => {
     const offlineTimer = window.setTimeout(() => setCloudStatus((s) => (s === 'connecting' ? 'offline' : s)), 6000);
     let unsubscribe = () => {};
@@ -167,29 +168,21 @@ export default function App() {
     cloudModule()
       .then((m) => {
         if (cancelled) return;
-        m.ensureUid().then(setMyUid, () => {});
-        const uploadLocalOnly = (snap: CloudSnapshot) => {
-          const loc = localRef.current;
-          const ids = new Set(snap.players.map((p) => p.id));
-          const sids = new Set(snap.sessions.map((x) => x.id));
-          const oldest = snap.sessions.length >= m.SESSION_LIMIT ? snap.sessions[snap.sessions.length - 1].date : 0;
-          for (const p of loc.players) if (!ids.has(p.id)) m.createPlayer(p).catch(() => {});
-          for (const x of loc.sessions) if (!sids.has(x.id) && x.date > oldest) m.saveSession(x).catch(() => {});
-        };
-        unsubscribe = m.subscribeCloud(
+        const unAuth = m.watchAuth(setAuthState);
+        const unData = m.subscribeCloud(
           (snap) => {
             setCloud(snap);
             if (snap.fromServer) setCloudStatus('online');
-            if (snap.fromServer && !synced.current) {
-              synced.current = true;
-              uploadLocalOnly(snap);
-            }
           },
           (e) => {
             console.warn('[cloud]', e.message);
             setCloudStatus('error');
           },
         );
+        unsubscribe = () => {
+          unAuth();
+          unData();
+        };
       })
       .catch((e) => {
         console.warn('[cloud] 불러오기 실패', e);
@@ -204,14 +197,6 @@ export default function App() {
   }, []);
 
   const warn = (what: string) => (e: unknown) => console.warn(`[cloud] ${what} 실패`, e);
-  /** 클라우드에 없는 선수면 새로 등록, 내가 주인이면 포지션만 갱신, 남의 선수면 그대로 */
-  const pushPlayer = (p: Player) => {
-    if (!cloudOn) return;
-    const existing = cloud?.players.find((x) => x.id === p.id);
-    if (!existing) cloudModule().then((m) => m.createPlayer(p)).catch(warn('선수 등록'));
-    else if (existing.ownerUid === myUid && existing.position !== p.position)
-      cloudModule().then((m) => m.updatePlayerPosition(p.id, p.position)).catch(warn('포지션 변경'));
-  };
   const pushSession = (x: SessionRecord) => {
     if (cloudOn) cloudModule().then((m) => m.saveSession(x)).catch(warn('기록 저장'));
   };
@@ -302,17 +287,37 @@ export default function App() {
     const pl = store.players.find((p) => p.id === id);
     if (pl) setSettings((s) => ({ ...s, position: pl.position }));
   };
-  const register = (name: string) => {
-    const { player } = upsertPlayer(store, name, settings.position);
-    setLocal((st) => upsertPlayer(st, name, settings.position).store);
-    setCurrentId(player.id);
-    pushPlayer(player);
+  /** 이름 + PIN. 이미 있는 이름이면 로그인, 없으면 등록. 실패 시 화면 문구 반환 */
+  const signIn = async (name: string, pin: string): Promise<string | null> => {
+    if (!cloudOn) {
+      const { player } = upsertPlayer(local, name, settings.position);
+      setLocal((st) => upsertPlayer(st, name, settings.position).store);
+      setCurrentId(player.id);
+      return null;
+    }
+    const m = await cloudModule();
+    const existing = store.players.find((p) => p.id === playerKey(name));
+    try {
+      if (existing && existing.ownerUid && existing.id === playerKey(existing.name)) {
+        await m.loginPlayer(name, pin);
+        setSettings((s) => ({ ...s, position: existing.position }));
+      } else {
+        await m.registerPlayer(name, pin, settings.position);
+      }
+      return null;
+    } catch (e) {
+      return m.authMessage(e);
+    }
+  };
+  const signOut = () => {
+    if (cloudOn) cloudModule().then((m) => m.logoutPlayer()).catch(warn('로그아웃'));
+    else setCurrentId(null);
   };
   const changeSettings = (s: QuizSettings) => {
     setSettings(s);
     if (current && s.position !== current.position) {
       setLocal((st) => setPlayerPosition(st, current.id, s.position));
-      pushPlayer({ ...current, position: s.position });
+      if (cloudOn) cloudModule().then((m) => m.updatePlayerPosition(current.id, s.position)).catch(warn('포지션 변경'));
     }
   };
 
@@ -364,7 +369,7 @@ export default function App() {
           store={store}
           cloudStatus={cloudStatus}
           onSelect={setCurrentId}
-          canRemove={(id) => !cloudOn || store.players.find((p) => p.id === id)?.ownerUid === myUid}
+          canRemove={(id) => !cloudOn || current?.id === id}
           onRemove={(id) => {
             setLocal((st) => removePlayer(st, id));
             if (currentId === id) setCurrentId(null);
@@ -430,8 +435,10 @@ export default function App() {
                   current={current}
                   settings={settings}
                   onSettings={changeSettings}
+                  pinMode={cloudOn}
                   onSelectPlayer={selectPlayer}
-                  onRegister={register}
+                  onSignIn={signIn}
+                  onSignOut={signOut}
                   onStart={startNew}
                 />
               ) : run.done ? (

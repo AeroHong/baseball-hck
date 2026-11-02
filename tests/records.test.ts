@@ -6,6 +6,7 @@ import {
   addSession,
   leaderboard,
   parseStore,
+  mergeLegacy,
   playerKey,
   playerStats,
   removePlayer,
@@ -151,5 +152,15 @@ describe('기록 · 대시보드', () => {
     const rec = { id: 's1', playerId: id, date: 1, position: null, difficulty: 'normal' as const, retry: false, answers: [ans('correct')] };
     store = addSession(addSession(store, rec), rec);
     expect(store.sessions).toHaveLength(1);
+  });
+
+  it('예전 형식 ID 선수는 같은 이름의 새 선수로 합쳐진다', () => {
+    const legacy = { id: 'p_%EC%98%A4', name: '오', position: null, createdAt: 1 };
+    const fresh = { id: playerKey('오'), name: '오', position: null, createdAt: 2, ownerUid: 'u' };
+    const ss = [{ id: 's1', playerId: legacy.id, date: 1, position: null, difficulty: 'normal' as const, retry: false, answers: [ans('correct')] }];
+    expect(mergeLegacy([legacy], ss).players).toHaveLength(1); // 새 선수 없으면 그대로
+    const m = mergeLegacy([legacy, fresh], ss);
+    expect(m.players.map((p) => p.id)).toEqual([fresh.id]);
+    expect(m.sessions[0].playerId).toBe(fresh.id);
   });
 });

@@ -150,3 +150,10 @@ button.primary.small { font: inherit; font-weight: 700; color: var(--bg); backgr
 .cloud-badge.online .cloud-dot { background: var(--role-back); }
 .cloud-badge.offline .cloud-dot { background: #d9a400; }
 .cloud-badge.error .cloud-dot { background: #d92d20; }
+
+/* 선수 로그인 (이름 + PIN) */
+.login-form { display: grid; gap: 8px; }
+.name-form input.pin { flex: 0 1 108px; letter-spacing: 0.2em; font-variant-numeric: tabular-nums; }
+.form-error { margin: 0; font-size: 0.85rem; color: #d92d20; font-weight: 600; }
+.logged-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border-radius: 8px; background: var(--bg); }
+.logged-in button { font: inherit; color: var(--fg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }

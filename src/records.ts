@@ -56,13 +56,31 @@ const GRADES: Grade[] = ['correct', 'close', 'wrong'];
 
 export const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-/** 이름 기반 선수 ID: 다른 기기에서 같은 이름으로 등록해도 같은 선수가 된다 */
+/**
+ * 이름 기반 선수 ID: 같은 이름 = 같은 선수. 보안 규칙이 'p_' + name.lower() 와 같은지 검사한다.
+ * (v3.0 초기엔 encodeURIComponent 를 썼다 → mergeLegacy 가 합친다)
+ */
 export function playerKey(name: string): string {
-  return 'p_' + encodeURIComponent(normalizeName(name).toLowerCase());
+  return 'p_' + normalizeName(name).toLowerCase();
+}
+
+/**
+ * 예전 형식 ID 의 선수: 같은 이름의 새 선수가 있으면 그쪽으로 판을 옮기고 목록에서 뺀다.
+ * 없으면 그대로 둔다(읽기 전용 — 새 기록은 같은 이름을 PIN 으로 등록한 뒤).
+ */
+export function mergeLegacy(players: Player[], sessions: SessionRecord[]): { players: Player[]; sessions: SessionRecord[] } {
+  const canonical = new Set(players.filter((p) => p.id === playerKey(p.name)).map((p) => p.id));
+  const remap = new Map<string, string>();
+  for (const p of players) if (p.id !== playerKey(p.name) && canonical.has(playerKey(p.name))) remap.set(p.id, playerKey(p.name));
+  if (!remap.size) return { players, sessions };
+  return {
+    players: players.filter((p) => !remap.has(p.id)),
+    sessions: sessions.map((x) => (remap.has(x.playerId) ? { ...x, playerId: remap.get(x.playerId)! } : x)),
+  };
 }
 
 export function normalizeName(name: string): string {
-  return name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+  return name.replace(/[\/]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
 }
 
 /** 손상된 저장값에도 버티도록 필드를 하나씩 검증 */

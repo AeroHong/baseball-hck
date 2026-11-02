@@ -1,14 +1,17 @@
 rules_version = '2';
 
 // 야구 백업 플레이 시뮬레이터 — 퀴즈 순위표
-// 모든 접근은 익명 로그인(기기별 uid) 필요.
-// - 선수: 만든 기기(ownerUid)만 포지션 변경·삭제
-// - 판: 누구나(로그인한 기기) 기존 선수에 대해 생성 — 같은 이름을 여러 기기에서 쓰기 위해
-//       수정 불가, 삭제는 기록한 기기 또는 선수 주인만
+// 읽기: 로그인(익명 포함) 필요.
+// 선수 = 이메일/비밀번호 계정 (화면에서는 이름 + PIN 4자리). ownerUid = 그 계정 uid.
+// - 선수 생성: 비밀번호 계정만, 문서 ID = 'p_' + 소문자 이름 (이름 하나에 선수 하나)
+// - 기록·포지션 변경·삭제: 그 선수 계정으로 로그인했을 때만 → 다른 사람 이름으로 기록 불가
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
       return request.auth != null;
+    }
+    function passwordUser() {
+      return signedIn() && request.auth.token.firebase.sign_in_provider == 'password';
     }
     function isPos(p) {
       return p == null || p in ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
@@ -19,8 +22,8 @@ service cloud.firestore {
 
     match /players/{playerId} {
       allow read: if signedIn();
-      allow create: if signedIn()
-        && playerId.size() <= 200
+      allow create: if passwordUser()
+        && playerId == 'p_' + request.resource.data.get('name', '').lower()
         && request.resource.data.keys().hasOnly(['name', 'position', 'createdAt', 'ownerUid'])
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.name is string
@@ -37,13 +40,14 @@ service cloud.firestore {
 
     match /sessions/{sessionId} {
       allow read: if signedIn();
-      allow create: if signedIn()
+      allow create: if passwordUser()
         && sessionId.size() <= 40
         && request.resource.data.keys().hasOnly(['playerId', 'date', 'position', 'difficulty', 'retry', 'answers', 'uid'])
         && request.resource.data.keys().hasAll(['playerId', 'date', 'difficulty', 'retry', 'answers', 'uid'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.playerId is string
         && exists(/databases/$(database)/documents/players/$(request.resource.data.playerId))
+        && playerOwner(request.resource.data.playerId) == request.auth.uid
         && request.resource.data.date is number
         && request.resource.data.date <= request.time.toMillis() + 600000
         && request.resource.data.date >= request.time.toMillis() - 31536000000
