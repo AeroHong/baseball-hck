@@ -46,6 +46,9 @@ export function usePlayAnimation(
       r.ball?.setAttribute('cx', p.x.toFixed(1));
       r.ball?.setAttribute('cy', (-p.y).toFixed(1));
     };
+    const from = plan.ballFrom ?? H;
+    r.hit?.setAttribute('x1', from.x.toFixed(1));
+    r.hit?.setAttribute('y1', (-from.y).toFixed(1));
     const setHit = (p: Point) => {
       r.hit?.setAttribute('x2', p.x.toFixed(1));
       r.hit?.setAttribute('y2', (-p.y).toFixed(1));
@@ -64,7 +67,7 @@ export function usePlayAnimation(
       for (const k of POS_KEYS) setFielder(k, lerp(start[k], plan.assignments[k].pos, kMove));
 
       const kHit = easeOutCubic(clamp01(t / (T1 * HIT_RATIO)));
-      const hitPoint = lerp(H, plan.ballPoint, kHit);
+      const hitPoint = lerp(from, plan.ballPoint, kHit);
       setHit(hitPoint);
 
       const kThrow = clamp01((t - T1) / T2);

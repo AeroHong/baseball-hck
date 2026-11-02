@@ -3,7 +3,10 @@ export interface Point {
   y: number;
 }
 
-export type Kind = 'ground' | 'single' | 'fly' | 'extra' | 'popup' | 'bunt';
+export type Kind = 'ground' | 'single' | 'fly' | 'extra' | 'popup' | 'bunt' | 'steal' | 'pickoff' | 'wildpitch';
+
+/** 타구 종류 + 투구 플레이(§13). 표시 순서 */
+export const KINDS: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt', 'steal', 'pickoff', 'wildpitch'];
 export type Base = 'H' | 'B1' | 'B2' | 'B3';
 export type PosKey = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
 export type Shift = 'normal' | 'dp' | 'in';
@@ -39,6 +42,8 @@ export interface Options {
   pitcherDpCover: 'SS' | '2B';
   extraHome2B: 'empty' | 'firstBase';
   buntPlay: 'standard' | 'rotation';
+  /** 도루·2루 견제 때 2루 커버 (§13). 우타자 SS / 좌타자 2B */
+  stealCover: 'SS' | '2B';
 }
 
 export const DEFAULT_OPTIONS: Options = {
@@ -47,6 +52,7 @@ export const DEFAULT_OPTIONS: Options = {
   pitcherDpCover: 'SS',
   extraHome2B: 'empty',
   buntPlay: 'standard',
+  stealCover: 'SS',
 };
 
 /** 주자 이동 (§12-4) */
@@ -60,6 +66,8 @@ export interface RunnerMove {
 export interface Plan {
   title: string;
   ballPoint: Point;
+  /** 공 출발점 (기본 홈). 투구 플레이는 마운드 */
+  ballFrom?: Point;
   assignments: Record<PosKey, Assignment>;
   /** [타구지점, (중계...), 목표]. 송구 없음 = [ballPoint] */
   throwPath: Point[];
@@ -86,5 +94,5 @@ export const POS_NAME: Record<PosKey, string> = {
 export const BASE_NAME: Record<Base, string> = { H: '홈', B1: '1루', B2: '2루', B3: '3루' };
 
 export const ROLE_NAME: Record<Role, string> = {
-  ball: '타구 처리', cover: '베이스 커버', cut: '중계·컷오프', back: '백업', stand: '대기',
+  ball: '공 처리', cover: '베이스 커버', cut: '중계·컷오프', back: '백업', stand: '대기',
 };

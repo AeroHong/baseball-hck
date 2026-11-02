@@ -3,10 +3,8 @@ import { DIFFICULTY_NAME } from '../quiz';
 import type { PlayerStats, RecordStore, Tally } from '../records';
 import { RANK_MIN_QUESTIONS, correctRate, leaderboard, playerStats, scoreRate, tally, weakest } from '../records';
 import { KIND_NAME, situationTitle } from '../rules';
-import type { Kind, PosKey, Situation } from '../types';
-import { POS_KEYS, POS_NAME, POS_NUMBER } from '../types';
-
-const KINDS: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt'];
+import type { PosKey, Situation } from '../types';
+import { KINDS, POS_KEYS, POS_NAME, POS_NUMBER } from '../types';
 
 const fmtDate = (ms: number) =>
   new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });

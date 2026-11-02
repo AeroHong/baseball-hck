@@ -11,6 +11,19 @@ const KINDS: { value: Kind; label: string }[] = [
   { value: 'bunt', label: KIND_NAME.bunt },
 ];
 
+/** 투구 플레이 (§13) */
+const PITCH_KINDS: { value: Kind; label: string }[] = [
+  { value: 'steal', label: KIND_NAME.steal },
+  { value: 'pickoff', label: KIND_NAME.pickoff },
+  { value: 'wildpitch', label: KIND_NAME.wildpitch },
+];
+
+const WILD_DIRS = [
+  { value: -27, label: '3루 쪽' },
+  { value: 0, label: '정면' },
+  { value: 27, label: '1루 쪽' },
+];
+
 const SHIFTS: { value: Shift; label: string }[] = [
   { value: 'normal', label: '정상' },
   { value: 'dp', label: '병살' },
@@ -52,12 +65,25 @@ export default function Controls({ situation: s, onChange }: ControlsProps) {
   return (
     <div className="controls">
       <Segment label="타구" options={KINDS} isOn={(v) => s.kind === v} onPick={(kind) => set({ kind })} />
-      <Segment
-        label="방향"
-        options={DIRECTIONS.map((d) => ({ value: d.angle, label: d.label }))}
-        isOn={(v) => s.angle === v}
-        onPick={(angle) => set({ angle })}
-      />
+      <Segment label="투구" options={PITCH_KINDS} isOn={(v) => s.kind === v} onPick={(kind) => set({ kind })} />
+      {s.kind === 'wildpitch' ? (
+        <Segment
+          label="공"
+          options={WILD_DIRS}
+          isOn={(v) => (v < 0 ? s.angle < -10 : v > 0 ? s.angle > 10 : Math.abs(s.angle) <= 10)}
+          onPick={(angle) => set({ angle })}
+        />
+      ) : (
+        s.kind !== 'steal' &&
+        s.kind !== 'pickoff' && (
+          <Segment
+            label="방향"
+            options={DIRECTIONS.map((d) => ({ value: d.angle, label: d.label }))}
+            isOn={(v) => s.angle === v}
+            onPick={(angle) => set({ angle })}
+          />
+        )
+      )}
       <Segment
         label="주자"
         options={[1, 2, 3].map((b) => ({ value: b as 1 | 2 | 3, label: `${b}루` }))}

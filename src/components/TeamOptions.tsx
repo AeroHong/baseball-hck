@@ -39,6 +39,13 @@ const ROWS: { [K in keyof Options]: { title: string; choices: Choice<K>[] } } = 
       { value: 'rotation', label: '로테이션' },
     ],
   },
+  stealCover: {
+    title: '도루·2루 견제 때 2루 커버',
+    choices: [
+      { value: 'SS', label: '유격수 (우타자)' },
+      { value: '2B', label: '2루수 (좌타자)' },
+    ],
+  },
 };
 
 interface TeamOptionsProps {

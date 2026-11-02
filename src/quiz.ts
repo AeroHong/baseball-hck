@@ -1,7 +1,7 @@
 import { dist, startPositions } from './geometry';
 import { DIRECTIONS, computePlan } from './rules';
 import type { Kind, Options, Point, PosKey, Situation } from './types';
-import { POS_KEYS } from './types';
+import { KINDS, POS_KEYS } from './types';
 
 export interface Question {
   situation: Situation;
@@ -29,7 +29,7 @@ export const MAX_POINTS = POINTS.correct;
 
 const MIN_MOVE_FT = 15;
 
-export const QUIZ_KINDS: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt'];
+export const QUIZ_KINDS: Kind[] = KINDS;
 const pick = <T,>(arr: readonly T[], rand: () => number): T => arr[Math.floor(rand() * arr.length) % arr.length];
 
 /** 문제 수비수 후보: 커버·중계·백업 역할이면서 시작 위치에서 15ft 이상 움직이는 수비수 */

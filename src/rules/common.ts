@@ -34,6 +34,8 @@ export function ballPointFor(kind: Kind, a: number): Point {
       return pt(95, a);
     case 'bunt':
       return pt(Math.abs(a) <= 10 ? 28 : 36, a);
+    default:
+      return { x: 0, y: -3 }; // 투구 플레이: 포수 포구 지점 (pitchPlays.ts 에서 따로 정함)
   }
 }
 

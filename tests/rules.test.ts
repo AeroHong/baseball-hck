@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { B1, B2, B3, H, dist, insidePlayable } from '../src/geometry';
 import { computePlan } from '../src/rules';
 import type { Kind, Options, Plan, Point, PosKey, Situation, Shift } from '../src/types';
-import { DEFAULT_OPTIONS, POS_KEYS } from '../src/types';
+import { DEFAULT_OPTIONS, KINDS, POS_KEYS } from '../src/types';
 
 function sit(p: Partial<Situation> & { r?: (1 | 2 | 3)[] }): Situation {
   const r = p.r ?? [];
@@ -184,7 +184,7 @@ describe('장타', () => {
 });
 
 describe('15. 불변 조건 — 전수 검사', () => {
-  const kinds: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt'];
+  const kinds: Kind[] = KINDS;
   const angles = [-40, -27, -14, 0, 14, 27, 40];
   const shifts: Shift[] = ['normal', 'dp', 'in'];
   const all: Situation[] = [];
@@ -195,7 +195,7 @@ describe('15. 불변 조건 — 전수 검사', () => {
           for (const shift of shifts)
             all.push({ kind, angle, outs, shift, runners: { 1: !!(m & 1), 2: !!(m & 2), 3: !!(m & 4) } });
 
-  it('상황 3,024개', () => expect(all).toHaveLength(3024));
+  it('상황 4,536개 (9종 × 방향 7 × 주자 8 × 아웃 3 × 시프트 3)', () => expect(all).toHaveLength(4536));
 
   // 기본 팀 방식 + 옵션을 하나씩 바꾼 5가지
   const optionSets: Options[] = [
@@ -205,6 +205,7 @@ describe('15. 불변 조건 — 전수 검사', () => {
     { ...DEFAULT_OPTIONS, pitcherDpCover: '2B' },
     { ...DEFAULT_OPTIONS, extraHome2B: 'firstBase' },
     { ...DEFAULT_OPTIONS, buntPlay: 'rotation' },
+    { ...DEFAULT_OPTIONS, stealCover: '2B' },
   ];
 
   it.each(optionSets.map((o, i) => [i, o] as const))('옵션 세트 %i: 모든 Plan이 §4 불변 조건 만족', (_i, opts) => {
@@ -225,6 +226,7 @@ describe('15. 불변 조건 — 전수 검사', () => {
         expect(insidePlayable(p.assignments[k].pos), `${ctx} ${k} 경기장 밖 (${x.toFixed(0)},${y.toFixed(0)})`).toBe(true);
       }
       expect(p.notes.length, ctx).toBeGreaterThanOrEqual(1);
+      if (p.ballFrom) expect(insidePlayable(p.ballFrom), `${ctx} ballFrom`).toBe(true);
       for (const q of [...p.throwPath, ...(p.altThrowPath ?? [])]) expect(insidePlayable(q), `${ctx} 경로점`).toBe(true);
     }
   });
@@ -371,5 +373,89 @@ describe('번트 (§12-3)', () => {
     expect(p.target).toBe('B1');
     expect(p.altThrowPath).toBeUndefined();
     expect(role(p, '1B')).toBe('ball');
+  });
+});
+
+describe('투구 플레이 (§13)', () => {
+  it('도루: 주자 1루 → C 처리, SS 2루 커버, CF 2루 뒤 백업, 목표 2루, 공은 마운드에서', () => {
+    const p = computePlan(sit({ kind: 'steal', r: [1] }));
+    expect(role(p, 'C')).toBe('ball');
+    expect(coverOf(p, 'SS')).toBe('B2');
+    expect(p.assignments.CF).toMatchObject({ role: 'back', base: 'B2' });
+    expect(p.target).toBe('B2');
+    expect(p.ballFrom).toEqual({ x: 0, y: 60.5 });
+    expect(p.runnerMoves).toEqual([{ id: 1, path: ['B1', 'B2'], result: 'attempt' }]);
+  });
+
+  it('도루: 팀 방식 2루 커버 = 2루수', () => {
+    const p = computePlan(sit({ kind: 'steal', r: [1] }), { ...DEFAULT_OPTIONS, stealCover: '2B' });
+    expect(coverOf(p, '2B')).toBe('B2');
+    expect(role(p, 'SS')).toBe('back');
+  });
+
+  it('도루: 1·3루 2아웃 전 → 키스톤 2루 앞 커트, 대체 경로 홈', () => {
+    const p = computePlan(sit({ kind: 'steal', r: [1, 3], outs: 1 }));
+    expect(cutters(p)).toEqual(['2B']);
+    expect(p.cutIndices).toEqual([1]);
+    expect(p.target).toBe('B2');
+    expect(same(p.altThrowPath![1], H)).toBe(true);
+  });
+
+  it('도루: 주자 1·2루 → 선행 주자 3루, 3B 커버, LF 3루 뒤 백업, 1루 주자도 진루', () => {
+    const p = computePlan(sit({ kind: 'steal', r: [1, 2] }));
+    expect(p.target).toBe('B3');
+    expect(coverOf(p, '3B')).toBe('B3');
+    expect(p.assignments.LF).toMatchObject({ role: 'back', base: 'B3' });
+    expect(p.runnerMoves.find((m) => m.id === 1)).toMatchObject({ path: ['B1', 'B2'], result: 'safe' });
+    expect(p.runnerMoves.find((m) => m.id === 2)).toMatchObject({ path: ['B2', 'B3'], result: 'attempt' });
+  });
+
+  it('도루: 만루·주자 없음 → 송구 없음 + 경고', () => {
+    for (const r of [[], [1, 2, 3], [3]] as (1 | 2 | 3)[][]) {
+      const p = computePlan(sit({ kind: 'steal', r }));
+      expect(p.target).toBeNull();
+      expect(p.warnings?.[0]).toMatch(/도루 상황이 아니다/);
+    }
+  });
+
+  it('견제: 주자 1루 → P 처리, 1B 커버, RF 1루 뒤 백업', () => {
+    const p = computePlan(sit({ kind: 'pickoff', r: [1] }));
+    expect(role(p, 'P')).toBe('ball');
+    expect(coverOf(p, '1B')).toBe('B1');
+    expect(p.assignments.RF).toMatchObject({ role: 'back', base: 'B1' });
+    expect(same(last(p), B1)).toBe(true);
+    expect(p.runnerMoves).toEqual([{ id: 1, path: ['B1'], result: 'attempt' }]);
+  });
+
+  it('견제: 주자 2루 → 2루 커버(SS), CF 백업 / 주자 3루만 → 3B 커버, LF 백업', () => {
+    const p2 = computePlan(sit({ kind: 'pickoff', r: [2] }));
+    expect(coverOf(p2, 'SS')).toBe('B2');
+    expect(p2.assignments.CF).toMatchObject({ role: 'back', base: 'B2' });
+    const p3 = computePlan(sit({ kind: 'pickoff', r: [3] }));
+    expect(coverOf(p3, '3B')).toBe('B3');
+    expect(p3.assignments.LF).toMatchObject({ role: 'back', base: 'B3' });
+  });
+
+  it('폭투: 주자 3루 → C 처리, P 홈 커버, 1B 홈 앞 백업, 목표 홈', () => {
+    const p = computePlan(sit({ kind: 'wildpitch', r: [3] }));
+    expect(role(p, 'C')).toBe('ball');
+    expect(coverOf(p, 'P')).toBe('H');
+    expect(p.assignments['1B']).toMatchObject({ role: 'back', base: 'H' });
+    expect(p.target).toBe('H');
+    expect(p.ballPoint.y).toBeLessThan(0);
+  });
+
+  it('폭투: 주자 2루 → 3루 송구, 3B 커버, LF 백업 / 공 방향은 좌우로', () => {
+    const p = computePlan(sit({ kind: 'wildpitch', r: [2], angle: -27 }));
+    expect(p.target).toBe('B3');
+    expect(coverOf(p, '3B')).toBe('B3');
+    expect(p.assignments.LF).toMatchObject({ role: 'back', base: 'B3' });
+    expect(p.ballPoint.x).toBeLessThan(0);
+    expect(computePlan(sit({ kind: 'wildpitch', r: [2], angle: 27 })).ballPoint.x).toBeGreaterThan(0);
+    expect(p.title).toContain('3루 쪽 폭투');
+  });
+
+  it('도루·견제 제목에는 방향이 없다', () => {
+    expect(computePlan(sit({ kind: 'steal', r: [1], angle: -40 })).title).toBe('0아웃 · 주자 1루 · 도루 저지');
   });
 });

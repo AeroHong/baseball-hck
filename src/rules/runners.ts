@@ -1,5 +1,6 @@
 import type { Base, RunnerMove, Situation } from '../types';
 import { buntTarget } from './bunt';
+import { pickoffTarget, stealTarget, wildTarget } from './pitchPlays';
 import { groundTarget } from './target';
 
 const ORDER: Base[] = ['H', 'B1', 'B2', 'B3', 'H'];
@@ -80,6 +81,30 @@ export function runnerMoves(s: Situation, target: Base | null): RunnerMove[] {
         if (forced(s, b)) add(b, path, lastOf(path) === t && t !== 'B1' ? 'out' : 'safe');
         else if (b === 3 && t === 'H') add(b, path, 'attempt'); // 스퀴즈
         else add(b, path, 'safe'); // 희생번트로 진루
+      }
+      break;
+    }
+    case 'steal': {
+      // 타자는 달리지 않는다. 도루 주자 attempt, 더블 스틸이면 뒤 주자도 진루
+      const t = stealTarget(s);
+      for (const b of on) {
+        const next = lastOf(advance(BASE_OF[b], 1));
+        if (t && next === t) add(b, advance(BASE_OF[b], 1), 'attempt');
+        else if (t === 'B3' && b === 1) add(b, advance('B1', 1), 'safe'); // 1·2루 더블 스틸
+        else hold(b);
+      }
+      break;
+    }
+    case 'pickoff': {
+      const t = pickoffTarget(s);
+      for (const b of on) add(b, [BASE_OF[b]], BASE_OF[b] === t ? 'attempt' : 'hold'); // 귀루 승부
+      break;
+    }
+    case 'wildpitch': {
+      const t = wildTarget(s);
+      for (const b of on) {
+        const path = advance(BASE_OF[b], 1);
+        add(b, path, lastOf(path) === t ? 'attempt' : 'safe');
       }
       break;
     }

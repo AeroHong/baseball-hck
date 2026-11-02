@@ -1,6 +1,7 @@
 import { B1, B2, B3, angleOf, dist } from './geometry';
 import { DIRECTIONS } from './rules';
 import type { Kind, Point, Shift, Situation } from './types';
+import { KINDS } from './types';
 
 export const DEFAULT_SITUATION: Situation = {
   kind: 'single',
@@ -42,16 +43,17 @@ export function applyClick(s: Situation, c: FieldClick): Situation {
   if (c.type === 'base') return { ...s, runners: { ...s.runners, [c.base]: !s.runners[c.base] } };
   // 내야 클릭: 내야 타구(땅볼·내야 뜬공·번트)는 유지, 외야 타구면 땅볼로
   // 외야 클릭: 내야 타구였으면 단타로, 외야 타구는 유지
+  // 투구 플레이(도루·견제·폭투)는 방향 클릭 시 내야 → 땅볼, 외야 → 단타
   const infieldKind = s.kind === 'ground' || s.kind === 'popup' || s.kind === 'bunt';
+  const outfieldKind = s.kind === 'single' || s.kind === 'fly' || s.kind === 'extra';
   let kind: Kind = s.kind;
   if (c.infield && !infieldKind) kind = 'ground';
-  else if (!c.infield && infieldKind) kind = 'single';
+  else if (!c.infield && !outfieldKind) kind = 'single';
   return { ...s, kind, angle: c.angle };
 }
 
 /* ── URL 쿼리 ↔ 상황 (공유용) ───────────────────────────── */
 
-const KINDS: Kind[] = ['ground', 'single', 'fly', 'extra', 'popup', 'bunt'];
 const SHIFTS: Shift[] = ['normal', 'dp', 'in'];
 
 export function toQuery(s: Situation): string {

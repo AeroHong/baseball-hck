@@ -5,12 +5,16 @@ import { buntPlan, buntSide } from './bunt';
 import { extraBasePlan } from './extraBase';
 import { grounderPlan } from './grounder';
 import { outfieldPlan } from './outfield';
+import { pickoffPlan, stealPlan, wildPitchPlan, wildSide } from './pitchPlays';
 import { popupPlan } from './popup';
 import { runnerMoves } from './runners';
 
 export const KIND_NAME: Record<Kind, string> = {
   ground: '땅볼', single: '단타', fly: '뜬공', extra: '장타', popup: '내야 뜬공', bunt: '번트',
+  steal: '도루 저지', pickoff: '견제', wildpitch: '폭투·포일',
 };
+
+const WILD_SIDE_NAME = { '3B': '3루 쪽', C: '정면', '1B': '1루 쪽' } as const;
 
 const BUNT_SIDE_NAME = { '3B': '3루 쪽', P: '투수 앞', '1B': '1루 쪽' } as const;
 
@@ -38,7 +42,13 @@ export function runnersLabel(s: Situation): string {
 }
 
 export function situationTitle(s: Situation): string {
-  const where = s.kind === 'bunt' ? BUNT_SIDE_NAME[buntSide(s.angle)] : directionLabel(s.angle);
+  if (s.kind === 'steal' || s.kind === 'pickoff') return `${s.outs}아웃 · ${runnersLabel(s)} · ${KIND_NAME[s.kind]}`;
+  const where =
+    s.kind === 'bunt'
+      ? BUNT_SIDE_NAME[buntSide(s.angle)]
+      : s.kind === 'wildpitch'
+        ? WILD_SIDE_NAME[wildSide(s.angle)]
+        : directionLabel(s.angle);
   return `${s.outs}아웃 · ${runnersLabel(s)} · ${where} ${KIND_NAME[s.kind]}`;
 }
 
@@ -64,6 +74,12 @@ function kindPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'warnings' | '
       return popupPlan(s);
     case 'bunt':
       return buntPlan(s, o);
+    case 'steal':
+      return stealPlan(s, o);
+    case 'pickoff':
+      return pickoffPlan(s, o);
+    case 'wildpitch':
+      return wildPitchPlan(s);
     default:
       return outfieldPlan(s, o);
   }

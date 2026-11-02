@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dist, startPositions } from '../src/geometry';
 import { candidates, grade, makeQuestion, makeRun, seededRandom } from '../src/quiz';
 import { computePlan } from '../src/rules';
-import { DEFAULT_OPTIONS, POS_KEYS } from '../src/types';
+import { DEFAULT_OPTIONS, KINDS, POS_KEYS } from '../src/types';
 
 describe('퀴즈 (§12-5)', () => {
   it('문제 수비수는 커버·중계·백업 역할이고 15ft 이상 움직인다 (시드 500개)', () => {
@@ -30,7 +30,7 @@ describe('퀴즈 (§12-5)', () => {
   it('여러 타구 종류가 고르게 나온다', () => {
     const kinds = new Set<string>();
     for (let seed = 1; seed <= 200; seed++) kinds.add(makeQuestion(DEFAULT_OPTIONS, seededRandom(seed)).situation.kind);
-    expect(kinds.size).toBe(6);
+    expect(kinds.size).toBe(KINDS.length);
   });
 
   it('후보 예: 좌익 단타 주자 2루 → 3루수(컷오프) 포함', () => {
