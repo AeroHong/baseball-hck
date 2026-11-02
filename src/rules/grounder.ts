@@ -73,11 +73,16 @@ export function grounderPlan(s: Situation, o: Options): Omit<Plan, 'title' | 'wa
   if (r[2] || r[3] || homeInvolved) {
     as.C = cover('H', H, homeInvolved ? ' (홈 송구 받음)' : ' (득점권 주자 대비)');
   } else {
-    as.C = { pos: beyond(H, B1, 22), role: 'back', base: 'B1', text: '1루 파울라인 따라 1루 백업' };
+    // 파울라인 따라 내려가 1루 송구 연장선(파울 지역)에서 막는다
+    as.C = { pos: beyond(fromFor(B1), B1, 30), role: 'back', base: 'B1', text: '파울라인 따라 내려가 1루 송구 연장선에서 백업' };
   }
 
   // 외야
-  as.RF = { pos: beyond(fromFor(B1), B1, 40), role: 'back', base: 'B1', text: '1루 송구 뒤 백업' };
+  // 포수가 1루 송구 연장선을 맡으면 우익수는 외야 쪽에서 1루 뒤로 들어온다. 포수가 홈을 지키면 우익수가 연장선을 맡는다
+  as.RF =
+    as.C.role === 'back'
+      ? { pos: lerp(start.RF, B1, 0.62), role: 'back', base: 'B1', text: '1루 뒤 우익 쪽으로 들어와 백업 (튀어 나가는 공 대비)' }
+      : { pos: beyond(fromFor(B1), B1, 40), role: 'back', base: 'B1', text: '1루 송구 연장선(파울 지역)까지 와서 백업' };
   as.CF = dp2B
     ? { pos: beyond(ball, B2, 45), role: 'back', base: 'B2', text: '2루 송구 뒤 백업' }
     : { pos: beyond(H, B2, 50), role: 'back', base: 'B2', text: '2루 뒤 백업' };
