@@ -135,7 +135,7 @@ export default function QuizSetup(p: QuizSetupProps) {
           {p.current ? `${p.current.name} 선수, 시작 →` : '선수를 먼저 등록하세요'}
         </button>
       </div>
-      <p className="hint-inline">정답 10점 · 근접 5점 · 오답 0점. 기록은 이 브라우저에 저장되어 ‘기록’ 탭 순위표에 올라갑니다.</p>
+      <p className="hint-inline">정답 10점 · 근접 5점 · 오답 0점. 기록은 클라우드에 저장되어 ‘기록’ 탭 순위표에 올라갑니다 (이름이 같으면 같은 선수).</p>
     </section>
   );
 }

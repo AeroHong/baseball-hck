@@ -1,6 +1,6 @@
 /**
  * 선수 등록 · 퀴즈 기록 · 대시보드 통계 (순수 함수).
- * 저장은 App 이 localStorage 에 JSON 으로 한다. 이 브라우저 안에서만 공유된다.
+ * 저장: 클라우드(cloud.ts, Firestore) 가 기본, 연결할 수 없으면 localStorage.
  */
 import type { Difficulty, Grade } from './quiz';
 import { MAX_POINTS, POINTS } from './quiz';
@@ -50,7 +50,12 @@ const MAX_SESSIONS = 300;
 const DIFFS: Difficulty[] = ['easy', 'normal', 'hard'];
 const GRADES: Grade[] = ['correct', 'close', 'wrong'];
 
-const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+export const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+/** 이름 기반 선수 ID: 다른 기기에서 같은 이름으로 등록해도 같은 선수가 된다 */
+export function playerKey(name: string): string {
+  return 'p_' + encodeURIComponent(normalizeName(name).toLowerCase());
+}
 
 export function normalizeName(name: string): string {
   return name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
@@ -93,7 +98,7 @@ export function upsertPlayer(store: RecordStore, name: string, position: PosKey 
     const player = { ...found, position };
     return { store: { ...store, players: store.players.map((p) => (p.id === found.id ? player : p)), currentId: found.id }, player };
   }
-  const player: Player = { id: newId(), name: n, position, createdAt: Date.now() };
+  const player: Player = { id: playerKey(n), name: n, position, createdAt: Date.now() };
   return { store: { ...store, players: [...store.players, player], currentId: player.id }, player };
 }
 
@@ -110,9 +115,10 @@ export function removePlayer(store: RecordStore, id: string): RecordStore {
   };
 }
 
-export function addSession(store: RecordStore, rec: Omit<SessionRecord, 'id'>): RecordStore {
+export function addSession(store: RecordStore, rec: Omit<SessionRecord, 'id'> & { id?: string }): RecordStore {
   if (!rec.answers.length) return store;
-  const sessions = [...store.sessions, { ...rec, id: newId() }];
+  if (rec.id && store.sessions.some((s) => s.id === rec.id)) return store;
+  const sessions = [...store.sessions, { ...rec, id: rec.id ?? newId() }];
   return { ...store, sessions: sessions.slice(-MAX_SESSIONS) };
 }
 

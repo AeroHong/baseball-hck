@@ -13,12 +13,14 @@ import Runners from './components/Runners';
 import Scoreboard, { type Mode, type Theme } from './components/Scoreboard';
 import Summary from './components/Summary';
 import TeamOptions from './components/TeamOptions';
+import type { CloudSnapshot, CloudStatus } from './cloud';
 import { startPositions } from './geometry';
 import { grade, makeRun, type Question } from './quiz';
 import {
   EMPTY_STORE,
   addSession,
   leaderboard,
+  newId,
   parseStore,
   playerStats,
   removePlayer,
@@ -26,7 +28,9 @@ import {
   tally,
   upsertPlayer,
   type AnswerRecord,
+  type Player,
   type RecordStore,
+  type SessionRecord,
 } from './records';
 import { computePlan } from './rules';
 import { applyClick, fromQuery, interpretClick, toQuery } from './situation';
@@ -39,6 +43,9 @@ const THEME_KEY = 'baseball-hck:theme';
 const OPTIONS_KEY = 'baseball-hck:options';
 const RECORDS_KEY = 'baseball-hck:records';
 const SETTINGS_KEY = 'baseball-hck:quiz-settings';
+const CURRENT_KEY = 'baseball-hck:current-player';
+/** Firebase SDK 는 크기가 커서 첫 화면 뒤에 따로 불러온다 */
+const cloudModule = () => import('./cloud');
 const DEFAULT_SETTINGS: QuizSettings = { position: null, count: 10, difficulty: 'normal' };
 
 function load<T>(key: string, fallback: T, parse: (raw: string) => T | null): T {
@@ -109,11 +116,24 @@ export default function App() {
   const [focus, setFocus] = useState<PosKey | null>(null);
   const [theme, setTheme] = useState<Theme>(() => load(THEME_KEY, 'auto', parseTheme));
   const [options, setOptions] = useState<Options>(() => load(OPTIONS_KEY, DEFAULT_OPTIONS, parseOptions));
-  const [store, setStore] = useState<RecordStore>(() => load(RECORDS_KEY, EMPTY_STORE, parseStore));
+  // 기기 사본(오프라인·클라우드 장애 대비) + 클라우드 실시간 데이터
+  const [local, setLocal] = useState<RecordStore>(() => load(RECORDS_KEY, EMPTY_STORE, parseStore));
+  const [cloud, setCloud] = useState<CloudSnapshot | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus>('connecting');
+  const [currentId, setCurrentId] = useState<string | null>(() => load(CURRENT_KEY, local.currentId, (raw) => raw));
+  const synced = useRef(false);
+  const localRef = useRef(local);
+  localRef.current = local;
   const [settings, setSettings] = useState<QuizSettings>(() => load(SETTINGS_KEY, DEFAULT_SETTINGS, parseSettings));
   const [run, setRun] = useState<QuizRun | null>(null);
   const [timeline] = useState(() => new Timeline());
   const dragging = useRef(false);
+
+  const store: RecordStore = useMemo(() => {
+    const base = cloud && cloudStatus !== 'error' ? { players: cloud.players, sessions: cloud.sessions } : local;
+    return { version: 1, players: base.players, sessions: base.sessions, currentId: base.players.some((p) => p.id === currentId) ? currentId : null };
+  }, [cloud, cloudStatus, local, currentId]);
+  const cloudOn = cloudStatus !== 'error';
 
   const current = store.players.find((p) => p.id === store.currentId) ?? null;
   const question = mode === 'quiz' && run && !run.done ? run.questions[run.index] : null;
@@ -134,7 +154,59 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => save(OPTIONS_KEY, JSON.stringify(options)), [options]);
-  useEffect(() => save(RECORDS_KEY, JSON.stringify(store)), [store]);
+  useEffect(() => save(RECORDS_KEY, JSON.stringify(local)), [local]);
+  useEffect(() => save(CURRENT_KEY, currentId ?? ''), [currentId]);
+
+  // 클라우드 구독. 처음 서버와 연결되면 기기에만 있는 기록을 올린다
+  useEffect(() => {
+    const offlineTimer = window.setTimeout(() => setCloudStatus((s) => (s === 'connecting' ? 'offline' : s)), 6000);
+    let unsubscribe = () => {};
+    let cancelled = false;
+
+    cloudModule()
+      .then((m) => {
+        if (cancelled) return;
+        const uploadLocalOnly = (snap: CloudSnapshot) => {
+          const loc = localRef.current;
+          const ids = new Set(snap.players.map((p) => p.id));
+          const sids = new Set(snap.sessions.map((x) => x.id));
+          const oldest = snap.sessions.length >= m.SESSION_LIMIT ? snap.sessions[snap.sessions.length - 1].date : 0;
+          for (const p of loc.players) if (!ids.has(p.id)) m.savePlayer(p).catch(() => {});
+          for (const x of loc.sessions) if (!sids.has(x.id) && x.date > oldest) m.saveSession(x).catch(() => {});
+        };
+        unsubscribe = m.subscribeCloud(
+          (snap) => {
+            setCloud(snap);
+            if (snap.fromServer) setCloudStatus('online');
+            if (snap.fromServer && !synced.current) {
+              synced.current = true;
+              uploadLocalOnly(snap);
+            }
+          },
+          (e) => {
+            console.warn('[cloud]', e.message);
+            setCloudStatus('error');
+          },
+        );
+      })
+      .catch((e) => {
+        console.warn('[cloud] 불러오기 실패', e);
+        setCloudStatus('error');
+      });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(offlineTimer);
+      unsubscribe();
+    };
+  }, []);
+
+  const pushPlayer = (p: Player) => {
+    if (cloudOn) cloudModule().then((m) => m.savePlayer(p)).catch((e) => console.warn('[cloud] 선수 저장 실패', e));
+  };
+  const pushSession = (x: SessionRecord) => {
+    if (cloudOn) cloudModule().then((m) => m.saveSession(x)).catch((e) => console.warn('[cloud] 기록 저장 실패', e));
+  };
   useEffect(() => save(SETTINGS_KEY, JSON.stringify(settings)), [settings]);
 
   /* ── 퀴즈 진행 ── */
@@ -163,18 +235,20 @@ export default function App() {
   };
 
   const finish = (r: QuizRun) => {
-    if (r.answers.length) {
-      setStore((st) =>
-        addSession(st, {
-          playerId: r.playerId,
-          date: Date.now(),
-          position: r.settings.position,
-          difficulty: r.settings.difficulty,
-          retry: r.retry,
-          answers: r.answers,
-        }),
-      );
-    }
+    if (!r.answers.length) return;
+    const rec: SessionRecord = {
+      id: newId(),
+      playerId: r.playerId,
+      date: Date.now(),
+      position: r.settings.position,
+      difficulty: r.settings.difficulty,
+      retry: r.retry,
+      answers: r.answers,
+    };
+    // 기기 사본에 선수가 없으면(다른 기기에서 등록한 선수) 같이 넣어 둔다
+    const pl = store.players.find((p) => p.id === r.playerId);
+    setLocal((st) => addSession(pl && !st.players.some((p) => p.id === pl.id) ? { ...st, players: [...st.players, pl] } : st, rec));
+    pushSession(rec);
   };
 
   const result = question && run?.guess ? grade(run.guess, plan.assignments[question.fielder].pos, run.settings.difficulty) : null;
@@ -216,14 +290,22 @@ export default function App() {
   /* ── 선수 ── */
 
   const selectPlayer = (id: string | null) => {
-    setStore((st) => ({ ...st, currentId: id }));
+    setCurrentId(id);
     const pl = store.players.find((p) => p.id === id);
     if (pl) setSettings((s) => ({ ...s, position: pl.position }));
   };
-  const register = (name: string) => setStore((st) => upsertPlayer(st, name, settings.position).store);
+  const register = (name: string) => {
+    const { player } = upsertPlayer(store, name, settings.position);
+    setLocal((st) => upsertPlayer(st, name, settings.position).store);
+    setCurrentId(player.id);
+    pushPlayer(player);
+  };
   const changeSettings = (s: QuizSettings) => {
     setSettings(s);
-    if (current && s.position !== current.position) setStore((st) => setPlayerPosition(st, current.id, s.position));
+    if (current && s.position !== current.position) {
+      setLocal((st) => setPlayerPosition(st, current.id, s.position));
+      pushPlayer({ ...current, position: s.position });
+    }
   };
 
   /* ── 그라운드 입력 ── */
@@ -272,8 +354,9 @@ export default function App() {
       {mode === 'stats' ? (
         <Dashboard
           store={store}
-          onSelect={(id) => setStore((st) => ({ ...st, currentId: id }))}
-          onRemove={(id) => setStore((st) => removePlayer(st, id))}
+          cloudStatus={cloudStatus}
+          onSelect={setCurrentId}
+          onRemove={cloudOn ? undefined : (id) => setLocal((st) => removePlayer(st, id))}
           onStartQuiz={() => changeMode('quiz')}
           onReview={review}
         />

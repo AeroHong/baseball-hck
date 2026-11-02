@@ -6,6 +6,7 @@ import {
   addSession,
   leaderboard,
   parseStore,
+  playerKey,
   playerStats,
   removePlayer,
   scoreRate,
@@ -135,5 +136,20 @@ describe('기록 · 대시보드', () => {
     expect(p.sessions[0].difficulty).toBe('normal');
     expect(p.sessions[0].answers).toHaveLength(1);
     expect(p.currentId).toBeNull();
+  });
+
+  it('선수 ID는 이름 기반 — 다른 기기에서 같은 이름이면 같은 ID', () => {
+    const a = upsertPlayer(EMPTY_STORE, ' 홍길동 ', null).player;
+    const b = upsertPlayer(EMPTY_STORE, '홍길동', '2B').player;
+    expect(a.id).toBe(b.id);
+    expect(playerKey('Kim')).toBe(playerKey('kim'));
+    expect(playerKey('a/b')).not.toContain('/');
+  });
+
+  it('같은 ID의 판은 한 번만 저장 (클라우드 재전송 대비)', () => {
+    let { store, id } = withPlayer(EMPTY_STORE, 'A');
+    const rec = { id: 's1', playerId: id, date: 1, position: null, difficulty: 'normal' as const, retry: false, answers: [ans('correct')] };
+    store = addSession(addSession(store, rec), rec);
+    expect(store.sessions).toHaveLength(1);
   });
 });

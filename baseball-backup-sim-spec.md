@@ -378,7 +378,8 @@ interface Plan {
   - §13-2 기록 대시보드 (순위표, 선수별·포지션별·타구별 통계, 추이, 오답 노트)
   - §13-3 재생 막대 (일시정지·단계 이동·구간 이동·속도)
   - §13-4 투구 플레이: 도루 저지 · 견제 · 폭투/포일, 팀 방식 `stealCover`
-  - 테스트 103개 (불변 조건: 9종 × 옵션 7세트 × 상황 4,536개)
+  - §13-2 기록을 Firebase Firestore 로 (기기 간 공유 순위표)
+  - 테스트 105개 (불변 조건: 9종 × 옵션 7세트 × 상황 4,536개)
 - **v2.1 (2026-11-02)** — 2차 기능 전부 구현 완료
   - §12-1 팀 방식 5종 + 패널, §12-2 내야 뜬공·인필드 플라이 배지, §12-3 번트 기본/로테이션
   - §12-4 주자 애니메이션 (`rules/runners.ts`, `RunnerMarkers.tsx`)
@@ -506,7 +507,12 @@ interface RunnerMove {                    // §12-4
 
 ### 13-2. 기록 대시보드 (`records.ts`, `Dashboard.tsx`)
 - 헤더 모드: 학습 / 퀴즈 / **기록**.
-- 저장: `localStorage['baseball-hck:records']` = `{ version: 1, players, sessions, currentId }` — 이 브라우저에서만 공유. 판은 최대 300개 유지. 같은 이름(대소문자·공백 무시)은 같은 선수.
+- 저장: **Firebase Firestore** (프로젝트 `baseball-hck`, 서울 `asia-northeast3`) — 모든 기기가 같은 순위표. `cloud.ts` 는 동적 import(첫 화면 뒤 로드).
+  - `players/{p_+이름}` `{ name, position, createdAt }` — 선수 ID = `'p_' + encodeURIComponent(소문자 이름)` 이라 다른 기기에서 같은 이름이면 같은 선수.
+  - `sessions/{id}` `{ playerId, date, position, difficulty, retry, answers[] }` — 최근 2,000판을 실시간 구독(onSnapshot)해 순위 계산. 받은 데이터는 `parseStore` 로 검증.
+  - 오프라인: Firestore 기기 캐시(persistentLocalCache)에 쌓았다가 연결 시 전송. 기기 사본도 `localStorage['baseball-hck:records']` 에 유지, 클라우드 장애 시 사본으로 동작하고, 연결되면 사본에만 있는 기록을 올린다. 현재 선수는 `baseball-hck:current-player`.
+  - 보안 규칙(`firestore.rules`): 읽기 공개, 형식 검사를 통과한 생성만 허용(이름 1~12자, 포지션·난이도 목록, 존재하는 선수, 답안 1~20개, 날짜 범위), 선수는 포지션만 수정 가능, 판 수정·삭제 불가. 삭제는 콘솔에서 관리자가. 로그인이 없어 남의 이름으로 기록하는 것은 막지 못한다(익명 인증을 콘솔에서 켜면 소유자 검사 추가 가능).
+  - 클라우드 모드에서는 대시보드의 "선수 삭제" 버튼을 숨긴다.
 - 순위표: 점수율(얻은 점수 ÷ 만점) → 문제 수 → 최근 플레이 순. 5문제 미만은 순위 없음, 오답 다시 풀기 제외, 동점 같은 순위.
 - 선수별: 점수율·정답률·최고 기록·푼 문제 타일, 보완할 곳(3문제 이상 영역 중 최저), 포지션별·타구별 점수율 막대, 최근 12판 추이, 최근 판 표, 오답 노트.
 

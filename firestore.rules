@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// 야구 백업 플레이 시뮬레이터 — 퀴즈 순위표
+// 로그인 없이 쓰는 학습 도구라 누구나 읽고 새 기록을 남길 수 있다.
+// 대신 형식을 엄격히 검사하고, 남긴 기록의 수정·삭제는 막는다 (삭제는 Firebase 콘솔에서 관리자가).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isPos(p) {
+      return p == null || p in ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+    }
+
+    match /players/{playerId} {
+      allow read: if true;
+      allow create: if playerId.size() <= 200
+        && request.resource.data.keys().hasOnly(['name', 'position', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 12
+        && isPos(request.resource.data.position)
+        && request.resource.data.createdAt is number;
+      // 주 포지션만 바꿀 수 있다
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['position'])
+        && isPos(request.resource.data.position);
+      allow delete: if false;
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow create: if sessionId.size() <= 40
+        && request.resource.data.keys().hasOnly(['playerId', 'date', 'position', 'difficulty', 'retry', 'answers'])
+        && request.resource.data.keys().hasAll(['playerId', 'date', 'difficulty', 'retry', 'answers'])
+        && request.resource.data.playerId is string
+        && exists(/databases/$(database)/documents/players/$(request.resource.data.playerId))
+        && request.resource.data.date is number
+        && request.resource.data.date <= request.time.toMillis() + 600000
+        && request.resource.data.date >= request.time.toMillis() - 31536000000
+        && isPos(request.resource.data.get('position', null))
+        && request.resource.data.difficulty in ['easy', 'normal', 'hard']
+        && request.resource.data.retry is bool
+        && request.resource.data.answers is list
+        && request.resource.data.answers.size() >= 1
+        && request.resource.data.answers.size() <= 20;
+      allow update, delete: if false;
+    }
+  }
+}

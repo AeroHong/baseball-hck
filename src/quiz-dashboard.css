@@ -142,3 +142,11 @@ button.primary.small { font: inherit; font-weight: 700; color: var(--bg); backgr
 .miss-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .miss-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: var(--bg); font-size: 0.85rem; }
 .miss-list small { color: var(--muted); }
+
+/* 클라우드 상태 */
+.cloud-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--muted); margin-right: auto; margin-left: 10px; }
+.empty-state .cloud-badge { margin: 8px 0 0; }
+.cloud-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--role-stand); }
+.cloud-badge.online .cloud-dot { background: var(--role-back); }
+.cloud-badge.offline .cloud-dot { background: #d9a400; }
+.cloud-badge.error .cloud-dot { background: #d92d20; }

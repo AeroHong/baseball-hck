@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CloudStatus } from '../cloud';
 import { DIFFICULTY_NAME } from '../quiz';
 import type { PlayerStats, RecordStore, Tally } from '../records';
 import { RANK_MIN_QUESTIONS, correctRate, leaderboard, playerStats, scoreRate, tally, weakest } from '../records';
@@ -9,10 +10,28 @@ import { KINDS, POS_KEYS, POS_NAME, POS_NUMBER } from '../types';
 const fmtDate = (ms: number) =>
   new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+const CLOUD_TEXT: Record<CloudStatus, string> = {
+  connecting: '클라우드 연결 중…',
+  online: '클라우드 동기화 중 — 모든 기기가 같은 순위표를 봅니다',
+  offline: '오프라인 — 이 기기에 저장해 두었다가 연결되면 올립니다',
+  error: '클라우드에 연결할 수 없어 이 브라우저에만 저장합니다',
+};
+
+function CloudBadge({ status }: { status: CloudStatus }) {
+  return (
+    <span className={`cloud-badge ${status}`} role="status">
+      <span className="cloud-dot" aria-hidden="true" />
+      {CLOUD_TEXT[status]}
+    </span>
+  );
+}
+
 interface DashboardProps {
   store: RecordStore;
+  cloudStatus: CloudStatus;
   onSelect: (id: string) => void;
-  onRemove: (id: string) => void;
+  /** 없으면 삭제 버튼을 숨긴다 (클라우드 기록은 관리자만 삭제) */
+  onRemove?: (id: string) => void;
   onStartQuiz: () => void;
   onReview: (s: Situation) => void;
 }
@@ -59,7 +78,7 @@ function Trend({ values }: { values: number[] }) {
   );
 }
 
-function PlayerDetail({ s, onRemove, onReview }: { s: PlayerStats; onRemove: () => void; onReview: (x: Situation) => void }) {
+function PlayerDetail({ s, onRemove, onReview }: { s: PlayerStats; onRemove?: () => void; onReview: (x: Situation) => void }) {
   const [confirm, setConfirm] = useState(false);
   const weakPos = weakest(s.byPosition);
   const weakKind = weakest(s.byKind);
@@ -80,7 +99,7 @@ function PlayerDetail({ s, onRemove, onReview }: { s: PlayerStats; onRemove: () 
             </small>
           )}
         </h2>
-        {confirm ? (
+        {!onRemove ? null : confirm ? (
           <span className="confirm">
             기록까지 모두 지울까요?{' '}
             <button type="button" className="danger" onClick={onRemove}>
@@ -226,7 +245,7 @@ function PlayerDetail({ s, onRemove, onReview }: { s: PlayerStats; onRemove: () 
   );
 }
 
-export default function Dashboard({ store, onSelect, onRemove, onStartQuiz, onReview }: DashboardProps) {
+export default function Dashboard({ store, cloudStatus, onSelect, onRemove, onStartQuiz, onReview }: DashboardProps) {
   const rows = leaderboard(store);
   const selectedId = store.currentId ?? rows[0]?.player.id ?? null;
   const stats = selectedId ? playerStats(store, selectedId) : null;
@@ -237,6 +256,7 @@ export default function Dashboard({ store, onSelect, onRemove, onStartQuiz, onRe
         <section className="dash-card empty-state">
           <h2>아직 기록이 없습니다</h2>
           <p className="muted">퀴즈에서 이름을 등록하고 문제를 풀면 순위표와 포지션별 통계가 여기에 쌓입니다.</p>
+          <CloudBadge status={cloudStatus} />
           <div className="quiz-actions">
             <button type="button" className="primary" onClick={onStartQuiz}>
               퀴즈 시작 →
@@ -252,6 +272,7 @@ export default function Dashboard({ store, onSelect, onRemove, onStartQuiz, onRe
       <section className="dash-card" aria-labelledby="lb-h">
         <div className="pd-head">
           <h2 id="lb-h">순위표</h2>
+          <CloudBadge status={cloudStatus} />
           <button type="button" className="primary small" onClick={onStartQuiz}>
             퀴즈 풀기 →
           </button>
@@ -301,11 +322,18 @@ export default function Dashboard({ store, onSelect, onRemove, onStartQuiz, onRe
         </div>
         <p className="hint-inline">
           점수율 = 얻은 점수 ÷ 만점(정답 10 · 근접 5). {RANK_MIN_QUESTIONS}문제 이상 푼 선수만 순위에 오르고, 오답 다시 풀기는 빠집니다. 행을
-          누르면 아래에 선수별 통계가 나옵니다. 기록은 이 브라우저에만 저장됩니다.
+          누르면 아래에 선수별 통계가 나옵니다. 같은 이름은 어느 기기에서든 같은 선수로 합쳐집니다.
         </p>
       </section>
 
-      {stats && <PlayerDetail key={stats.player.id} s={stats} onRemove={() => onRemove(stats.player.id)} onReview={onReview} />}
+      {stats && (
+        <PlayerDetail
+          key={stats.player.id}
+          s={stats}
+          onRemove={onRemove ? () => onRemove(stats.player.id) : undefined}
+          onReview={onReview}
+        />
+      )}
     </div>
   );
 }
