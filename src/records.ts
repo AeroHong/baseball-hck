@@ -13,6 +13,8 @@ export interface Player {
   /** 주 포지션. null = 전체 포지션 */
   position: PosKey | null;
   createdAt: number;
+  /** 클라우드: 선수를 만든 기기(익명 로그인 uid). 이 기기만 포지션 변경·삭제 가능 */
+  ownerUid?: string;
 }
 
 export interface AnswerRecord {
@@ -31,6 +33,8 @@ export interface SessionRecord {
   difficulty: Difficulty;
   /** 오답 다시 풀기 판: 순위에서 제외 */
   retry: boolean;
+  /** 클라우드: 기록한 기기 uid */
+  uid?: string;
   answers: AnswerRecord[];
 }
 
@@ -69,7 +73,13 @@ export function parseStore(raw: string): RecordStore | null {
   const players: Player[] = Array.isArray(o.players)
     ? o.players
         .filter((p) => p && typeof p.id === 'string' && typeof p.name === 'string' && normalizeName(p.name))
-        .map((p) => ({ id: p.id, name: normalizeName(p.name), position: isPos(p.position) ? p.position : null, createdAt: Number(p.createdAt) || 0 }))
+        .map((p) => ({
+          id: p.id,
+          name: normalizeName(p.name),
+          position: isPos(p.position) ? p.position : null,
+          createdAt: Number(p.createdAt) || 0,
+          ...(typeof p.ownerUid === 'string' ? { ownerUid: p.ownerUid } : {}),
+        }))
     : [];
   const ids = new Set(players.map((p) => p.id));
   const sessions: SessionRecord[] = Array.isArray(o.sessions)
@@ -83,6 +93,7 @@ export function parseStore(raw: string): RecordStore | null {
           difficulty: DIFFS.includes(s.difficulty) ? s.difficulty : 'normal',
           retry: !!s.retry,
           answers: s.answers.filter((a) => a && isPos(a.fielder) && GRADES.includes(a.grade) && a.situation),
+          ...(typeof s.uid === 'string' ? { uid: s.uid } : {}),
         }))
     : [];
   const currentId = typeof o.currentId === 'string' && ids.has(o.currentId) ? o.currentId : null;

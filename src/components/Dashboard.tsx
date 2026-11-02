@@ -30,8 +30,9 @@ interface DashboardProps {
   store: RecordStore;
   cloudStatus: CloudStatus;
   onSelect: (id: string) => void;
-  /** 없으면 삭제 버튼을 숨긴다 (클라우드 기록은 관리자만 삭제) */
-  onRemove?: (id: string) => void;
+  onRemove: (id: string) => void;
+  /** 삭제 버튼 표시 여부 (클라우드: 선수를 만든 기기만) */
+  canRemove: (id: string) => boolean;
   onStartQuiz: () => void;
   onReview: (s: Situation) => void;
 }
@@ -101,7 +102,7 @@ function PlayerDetail({ s, onRemove, onReview }: { s: PlayerStats; onRemove?: ()
         </h2>
         {!onRemove ? null : confirm ? (
           <span className="confirm">
-            기록까지 모두 지울까요?{' '}
+            이 선수와 모든 기기의 기록을 지울까요?{' '}
             <button type="button" className="danger" onClick={onRemove}>
               삭제
             </button>{' '}
@@ -245,7 +246,7 @@ function PlayerDetail({ s, onRemove, onReview }: { s: PlayerStats; onRemove?: ()
   );
 }
 
-export default function Dashboard({ store, cloudStatus, onSelect, onRemove, onStartQuiz, onReview }: DashboardProps) {
+export default function Dashboard({ store, cloudStatus, onSelect, onRemove, canRemove, onStartQuiz, onReview }: DashboardProps) {
   const rows = leaderboard(store);
   const selectedId = store.currentId ?? rows[0]?.player.id ?? null;
   const stats = selectedId ? playerStats(store, selectedId) : null;
@@ -330,7 +331,7 @@ export default function Dashboard({ store, cloudStatus, onSelect, onRemove, onSt
         <PlayerDetail
           key={stats.player.id}
           s={stats}
-          onRemove={onRemove ? () => onRemove(stats.player.id) : undefined}
+          onRemove={canRemove(stats.player.id) ? () => onRemove(stats.player.id) : undefined}
           onReview={onReview}
         />
       )}

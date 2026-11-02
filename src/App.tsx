@@ -134,6 +134,7 @@ export default function App() {
     return { version: 1, players: base.players, sessions: base.sessions, currentId: base.players.some((p) => p.id === currentId) ? currentId : null };
   }, [cloud, cloudStatus, local, currentId]);
   const cloudOn = cloudStatus !== 'error';
+  const [myUid, setMyUid] = useState<string | null>(null);
 
   const current = store.players.find((p) => p.id === store.currentId) ?? null;
   const question = mode === 'quiz' && run && !run.done ? run.questions[run.index] : null;
@@ -166,12 +167,13 @@ export default function App() {
     cloudModule()
       .then((m) => {
         if (cancelled) return;
+        m.ensureUid().then(setMyUid, () => {});
         const uploadLocalOnly = (snap: CloudSnapshot) => {
           const loc = localRef.current;
           const ids = new Set(snap.players.map((p) => p.id));
           const sids = new Set(snap.sessions.map((x) => x.id));
           const oldest = snap.sessions.length >= m.SESSION_LIMIT ? snap.sessions[snap.sessions.length - 1].date : 0;
-          for (const p of loc.players) if (!ids.has(p.id)) m.savePlayer(p).catch(() => {});
+          for (const p of loc.players) if (!ids.has(p.id)) m.createPlayer(p).catch(() => {});
           for (const x of loc.sessions) if (!sids.has(x.id) && x.date > oldest) m.saveSession(x).catch(() => {});
         };
         unsubscribe = m.subscribeCloud(
@@ -201,11 +203,17 @@ export default function App() {
     };
   }, []);
 
+  const warn = (what: string) => (e: unknown) => console.warn(`[cloud] ${what} 실패`, e);
+  /** 클라우드에 없는 선수면 새로 등록, 내가 주인이면 포지션만 갱신, 남의 선수면 그대로 */
   const pushPlayer = (p: Player) => {
-    if (cloudOn) cloudModule().then((m) => m.savePlayer(p)).catch((e) => console.warn('[cloud] 선수 저장 실패', e));
+    if (!cloudOn) return;
+    const existing = cloud?.players.find((x) => x.id === p.id);
+    if (!existing) cloudModule().then((m) => m.createPlayer(p)).catch(warn('선수 등록'));
+    else if (existing.ownerUid === myUid && existing.position !== p.position)
+      cloudModule().then((m) => m.updatePlayerPosition(p.id, p.position)).catch(warn('포지션 변경'));
   };
   const pushSession = (x: SessionRecord) => {
-    if (cloudOn) cloudModule().then((m) => m.saveSession(x)).catch((e) => console.warn('[cloud] 기록 저장 실패', e));
+    if (cloudOn) cloudModule().then((m) => m.saveSession(x)).catch(warn('기록 저장'));
   };
   useEffect(() => save(SETTINGS_KEY, JSON.stringify(settings)), [settings]);
 
@@ -356,7 +364,15 @@ export default function App() {
           store={store}
           cloudStatus={cloudStatus}
           onSelect={setCurrentId}
-          onRemove={cloudOn ? undefined : (id) => setLocal((st) => removePlayer(st, id))}
+          canRemove={(id) => !cloudOn || store.players.find((p) => p.id === id)?.ownerUid === myUid}
+          onRemove={(id) => {
+            setLocal((st) => removePlayer(st, id));
+            if (currentId === id) setCurrentId(null);
+            if (cloudOn) {
+              const sids = store.sessions.filter((x) => x.playerId === id).map((x) => x.id);
+              cloudModule().then((m) => m.deletePlayer(id, sids)).catch(warn('선수 삭제'));
+            }
+          }}
           onStartQuiz={() => changeMode('quiz')}
           onReview={review}
         />

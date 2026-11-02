@@ -1,34 +1,47 @@
 rules_version = '2';
 
 // 야구 백업 플레이 시뮬레이터 — 퀴즈 순위표
-// 로그인 없이 쓰는 학습 도구라 누구나 읽고 새 기록을 남길 수 있다.
-// 대신 형식을 엄격히 검사하고, 남긴 기록의 수정·삭제는 막는다 (삭제는 Firebase 콘솔에서 관리자가).
+// 모든 접근은 익명 로그인(기기별 uid) 필요.
+// - 선수: 만든 기기(ownerUid)만 포지션 변경·삭제
+// - 판: 누구나(로그인한 기기) 기존 선수에 대해 생성 — 같은 이름을 여러 기기에서 쓰기 위해
+//       수정 불가, 삭제는 기록한 기기 또는 선수 주인만
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
     function isPos(p) {
       return p == null || p in ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
     }
+    function playerOwner(playerId) {
+      return get(/databases/$(database)/documents/players/$(playerId)).data.ownerUid;
+    }
 
     match /players/{playerId} {
-      allow read: if true;
-      allow create: if playerId.size() <= 200
-        && request.resource.data.keys().hasOnly(['name', 'position', 'createdAt'])
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && playerId.size() <= 200
+        && request.resource.data.keys().hasOnly(['name', 'position', 'createdAt', 'ownerUid'])
+        && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 1
         && request.resource.data.name.size() <= 12
         && isPos(request.resource.data.position)
         && request.resource.data.createdAt is number;
-      // 주 포지션만 바꿀 수 있다
-      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['position'])
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['position'])
         && isPos(request.resource.data.position);
-      allow delete: if false;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }
 
     match /sessions/{sessionId} {
-      allow read: if true;
-      allow create: if sessionId.size() <= 40
-        && request.resource.data.keys().hasOnly(['playerId', 'date', 'position', 'difficulty', 'retry', 'answers'])
-        && request.resource.data.keys().hasAll(['playerId', 'date', 'difficulty', 'retry', 'answers'])
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && sessionId.size() <= 40
+        && request.resource.data.keys().hasOnly(['playerId', 'date', 'position', 'difficulty', 'retry', 'answers', 'uid'])
+        && request.resource.data.keys().hasAll(['playerId', 'date', 'difficulty', 'retry', 'answers', 'uid'])
+        && request.resource.data.uid == request.auth.uid
         && request.resource.data.playerId is string
         && exists(/databases/$(database)/documents/players/$(request.resource.data.playerId))
         && request.resource.data.date is number
@@ -40,7 +53,9 @@ service cloud.firestore {
         && request.resource.data.answers is list
         && request.resource.data.answers.size() >= 1
         && request.resource.data.answers.size() <= 20;
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if signedIn()
+        && (resource.data.uid == request.auth.uid || playerOwner(resource.data.playerId) == request.auth.uid);
     }
   }
 }
